@@ -3,7 +3,6 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0f1f2b" />
     <title>ELQWifi Mission Console</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="stylesheet" href="/styles.css" />
@@ -257,7 +256,7 @@
           <article class="panel side-panel">
             <div class="panel-head">
               <h2>Live modem health</h2>
-              <span id="diagLastUpdate" class="inline-action" style="background: transparent; border: none; padding: 0; cursor: default; color: var(--text-soft); font-size: 0.8rem;">--</span>
+              <span id="diagLastUpdate" class="diag-last-update">--</span>
             </div>
             <div id="modemHealthGrid" class="modem-health-grid">
               <div class="diag-card">
@@ -301,16 +300,16 @@
                 <li><strong>Slow NETLIGHT blink (15s+):</strong> Usually indicates mode active but idle. Check power supply (should be ≥4V @ 800mA capacity).</li>
               </ul>
             </div>
-            <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(176, 223, 236, 0.2);">
+            <div class="diag-rf-test">
               <div class="section-kicker">RF Interference Test</div>
-              <p style="color: var(--text-soft); font-size: 0.9rem; margin-top: 8px;">
+              <p class="diag-rf-copy">
                 Disable GPS to check if it's interfering with LTE signal. Watch RSSI and registration before/after. If signal improves when GPS is off, RF interference is likely.
               </p>
-              <div class="dual-action-row" style="margin-top: 12px;">
+              <div class="dual-action-row dual-action-row-spaced">
                 <button id="gpsTestOffBtn" class="button-ghost" type="button">Disable GPS</button>
                 <button id="gpsTestOnBtn" class="button-ghost" type="button">Enable GPS</button>
               </div>
-              <div id="gpsTestResult" class="sms-status" style="margin-top: 10px;">Ready</div>
+              <div id="gpsTestResult" class="sms-status gps-test-result">Ready</div>
             </div>
           </article>
         </div>

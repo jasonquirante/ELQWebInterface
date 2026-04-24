@@ -892,6 +892,35 @@ pre {
   margin-bottom: 6px;
 }
 
+.diag-last-update {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: default;
+  color: var(--text-soft);
+  font-size: 0.8rem;
+}
+
+.diag-rf-test {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(176, 223, 236, 0.2);
+}
+
+.diag-rf-copy {
+  color: var(--text-soft);
+  font-size: 0.9rem;
+  margin-top: 8px;
+}
+
+.dual-action-row-spaced {
+  margin-top: 12px;
+}
+
+.gps-test-result {
+  margin-top: 10px;
+}
+
 .pulse {
   animation: pulse 1.8s ease-in-out infinite;
 }

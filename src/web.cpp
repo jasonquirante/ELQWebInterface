@@ -117,6 +117,8 @@ bool tryServeFromSpiffs(const String& requestPath) {
     if (!file) {
       return false;
     }
+    Serial.print("[WEB] Serving from SPIFFS: ");
+    Serial.println(path);
     server.streamFile(file, getContentType(path));
     file.close();
     return true;
@@ -127,6 +129,8 @@ bool tryServeFromSpiffs(const String& requestPath) {
     if (!file) {
       return false;
     }
+    Serial.print("[WEB] Serving from SPIFFS: ");
+    Serial.println(path + ".html");
     server.streamFile(file, "text/html");
     file.close();
     return true;
@@ -148,8 +152,8 @@ bool tryServeFromSd(const String& requestPath) {
     candidates[candidateCount++] = path.substring(strlen("/portal"));
   }
 
-  const String roots[2] = {"/www", "/sd/www"};
-  for (size_t i = 0; i < 2; ++i) {
+  const String roots[4] = {"/www", "/sd/www", "", "/sd"};
+  for (size_t i = 0; i < 4; ++i) {
     for (size_t c = 0; c < candidateCount; ++c) {
       const String effectivePath = candidates[c];
       String sdPath = roots[i] + effectivePath;
@@ -158,6 +162,8 @@ bool tryServeFromSd(const String& requestPath) {
         if (!file) {
           continue;
         }
+        Serial.print("[WEB] Serving from SD: ");
+        Serial.println(sdPath);
         server.streamFile(file, getContentType(effectivePath));
         file.close();
         return true;
@@ -169,6 +175,8 @@ bool tryServeFromSd(const String& requestPath) {
         if (!file) {
           continue;
         }
+        Serial.print("[WEB] Serving from SD: ");
+        Serial.println(sdPath);
         server.streamFile(file, "text/html");
         file.close();
         return true;
@@ -312,14 +320,16 @@ bool appendSession(const String& code, int limitMinutes, int limitMb) {
 }
 
 void sendPortalRedirect() {
+  Serial.println("[WEB] Redirecting client to /portal/");
   server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
   server.sendHeader("Pragma", "no-cache");
   server.sendHeader("Expires", "-1");
-  server.sendHeader("Location", "http://192.168.4.1/");
+  server.sendHeader("Location", "http://192.168.4.1/portal/");
   server.send(302, "text/plain", "Redirecting to captive portal...");
 }
 
 void sendCaptiveLandingPage() {
+  Serial.println("[WEB] Serving inline captive fallback page.");
   const LteData status = lteGetData();
   String html;
   html.reserve(3800);
@@ -354,6 +364,22 @@ void sendCaptiveLandingPage() {
 }
 
 void handleRoot() {
+  if (tryServeFromSd("/index.html")) {
+    return;
+  }
+  if (tryServeFromSpiffs("/index.html")) {
+    return;
+  }
+  sendCaptiveLandingPage();
+}
+
+void handlePortalPage() {
+  if (tryServeFromSd("/index.html")) {
+    return;
+  }
+  if (tryServeFromSpiffs("/index.html")) {
+    return;
+  }
   sendCaptiveLandingPage();
 }
 
@@ -610,30 +636,7 @@ void handleGpsTest() {
 }
 
 void handleCaptiveProbe() {
-  if (shouldUseCaptivePortal()) {
-    sendCaptiveLandingPage();
-    return;
-  }
-
-  const String uri = server.uri();
-  if (uri == "/ncsi.txt") {
-    server.send(200, "text/plain", "Microsoft NCSI");
-    return;
-  }
-  if (uri == "/connecttest.txt") {
-    server.send(200, "text/plain", "Microsoft Connect Test");
-    return;
-  }
-  if (uri == "/hotspot-detect.html") {
-    server.send(200, "text/html", "<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>");
-    return;
-  }
-  if (uri == "/success.txt") {
-    server.send(200, "text/plain", "success");
-    return;
-  }
-
-  server.send(204, "text/plain", "");
+  handlePortalPage();
 }
 
 void handleApnPost() {
@@ -680,8 +683,8 @@ void webInit() {
   }
 
   server.on("/", HTTP_ANY, handleRoot);
-  server.on("/portal", HTTP_ANY, handleRoot);
-  server.on("/portal/", HTTP_ANY, handleRoot);
+  server.on("/portal", HTTP_ANY, handlePortalPage);
+  server.on("/portal/", HTTP_ANY, handlePortalPage);
   server.on("/status", HTTP_ANY, handleStatus);
   server.on("/portal/status", HTTP_GET, handlePortalStatus);
   server.on("/portal/signin", HTTP_POST, handlePortalSignin);
