@@ -365,6 +365,9 @@ void sendCaptiveLandingPage() {
   server.send(200, "text/html", html);
 }
 
+// Forward declarations
+void handlePortalPage();
+
 void handleRoot() {
   handlePortalPage();
 }
