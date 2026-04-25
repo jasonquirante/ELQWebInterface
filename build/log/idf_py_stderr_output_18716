@@ -1,0 +1,16 @@
+Command: cmake -G Ninja -B C:\Users\espad\Documents\GitHub\ELQWebInterface\build -DPYTHON_DEPS_CHECKED=1 -DPYTHON=C:\Espressif\tools\python\v6.0\venv\Scripts\python.exe -DESP_PLATFORM=1 -DSDKCONFIG='c:\Users\espad\Documents\GitHub\ELQWebInterface\sdkconfig' -DCCACHE_ENABLE=False C:\Users\espad\Documents\GitHub\ELQWebInterface
+Configuration Report                     
++---------------------------------------+
+|  Parser Version: 1                    |
+|  Verbosity: default                   |
+|  Defaults policy: sdkconfig           |
+|  Status: Finished with notifications  |
+|                                       |
+| Multiple Assignments                  |
+| +---------------------------+         |
+| | Symbol LWIP_PPP_SUPPORT:  |         |
+| |     y (user-set value)    |         |
+| |     y (user-set value)    |         |
+| |     -> using y            |         |
+| +---------------------------+         |
++---------------------------------------+

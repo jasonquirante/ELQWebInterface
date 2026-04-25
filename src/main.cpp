@@ -6,6 +6,7 @@
 #include "lte.h"
 #include "web.h"
 
+// SD card pins
 #define SD_CS 5
 constexpr int SD_SCK_PIN = 18;
 constexpr int SD_MISO_PIN = 19;
@@ -15,16 +16,11 @@ constexpr uint32_t SD_SAFE_FREQ_HZ = 4000000U;
 bool sdCardAvailable = false;
 const char kBootLogPath[] = "/boot.log";
 
+// --- Logging helpers ---
 static void appendSdLog(const String& message) {
-  if (!sdCardAvailable) {
-    return;
-  }
-
+  if (!sdCardAvailable) return;
   File file = SD.open(kBootLogPath, FILE_APPEND);
-  if (!file) {
-    return;
-  }
-
+  if (!file) return;
   file.println(message);
   file.close();
 }
@@ -32,7 +28,8 @@ static void appendSdLog(const String& message) {
 static void logStatus() {
   const LteData status = lteGetData();
   char buffer[200];
-  snprintf(buffer, sizeof(buffer), "LTE status responsive=%s connected=%s ip=%s rssi=%d cgatt=%d",
+  snprintf(buffer, sizeof(buffer),
+           "LTE status responsive=%s connected=%s ip=%s rssi=%d cgatt=%d",
            status.responsive ? "yes" : "no",
            status.dataConnected ? "yes" : "no",
            status.ipAddress.c_str(),
@@ -43,16 +40,17 @@ static void logStatus() {
   appendSdLog(buffer);
 }
 
+// --- Setup ---
 void setup() {
   Serial.begin(115200);
   delay(1000);
   Serial.println("\n[ELQWifi] Booting...");
 
+  // Mount SD card
   SPI.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, SD_CS);
   if (SD.begin(SD_CS, SPI, SD_SAFE_FREQ_HZ, "/sd", 5, false)) {
     sdCardAvailable = true;
     Serial.println("[ELQWifi] microSD card mounted.");
-    Serial.println("[ELQWifi] Web root expected at /www on SD card.");
     File file = SD.open(kBootLogPath, FILE_WRITE);
     if (file) {
       file.println("ELQWifi boot " + String(millis()));
@@ -63,12 +61,16 @@ void setup() {
     Serial.println("[ELQWifi] microSD card mount failed.");
   }
 
+  // Wi-Fi AP is initialized in webInit() to avoid duplicate AP restarts.
+
+  // Initialize LTE + Web (webInit starts AP + captive portal)
   lteInit();
   webInit();
 
   appendSdLog("Boot complete.");
 }
 
+// --- Loop ---
 void loop() {
   lteLoop();
   webLoop();

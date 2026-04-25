@@ -12,6 +12,8 @@
 
 namespace {
 constexpr const char* kApSsid = "ELQWifi";
+constexpr uint8_t kApChannel = 6;
+constexpr uint8_t kApHidden = 0;
 constexpr uint8_t kDnsPort = 53;
 const IPAddress kApIp(192, 168, 4, 1);
 const IPAddress kApGateway(192, 168, 4, 1);
@@ -364,13 +366,7 @@ void sendCaptiveLandingPage() {
 }
 
 void handleRoot() {
-  if (tryServeFromSd("/index.html")) {
-    return;
-  }
-  if (tryServeFromSpiffs("/index.html")) {
-    return;
-  }
-  sendCaptiveLandingPage();
+  handlePortalPage();
 }
 
 void handlePortalPage() {
@@ -659,21 +655,38 @@ void handleNotFound() {
     return;
   }
 
-  sendPortalRedirect();
+  handlePortalPage();
   return;
 }
 }  // namespace
 
 void webInit() {
   WiFi.mode(WIFI_AP);
-  WiFi.softAPConfig(kApIp, kApGateway, kApNetmask);
-  WiFi.softAP(kApSsid);
+  const bool apConfigOk = WiFi.softAPConfig(kApIp, kApGateway, kApNetmask);
+  const bool apStarted = WiFi.softAP(kApSsid, nullptr, kApChannel, kApHidden);
   delay(200);
+
+  if (!apConfigOk) {
+    Serial.println("[WEB] softAPConfig failed.");
+  }
+  if (!apStarted) {
+    Serial.println("[WEB] softAP start failed.");
+  }
 
   Serial.print("[WEB] AP SSID: ");
   Serial.println(kApSsid);
+  Serial.print("[WEB] AP started: ");
+  Serial.println(apStarted ? "yes" : "no");
+  Serial.print("[WEB] AP hidden: ");
+  Serial.println(kApHidden ? "yes" : "no");
+  Serial.print("[WEB] AP configured channel: ");
+  Serial.println(kApChannel);
+  Serial.print("[WEB] AP current channel: ");
+  Serial.println(WiFi.channel());
   Serial.print("[WEB] AP IP: ");
   Serial.println(WiFi.softAPIP());
+  Serial.print("[WEB] AP MAC: ");
+  Serial.println(WiFi.softAPmacAddress());
 
   spiffsReady = SPIFFS.begin(true);
   if (spiffsReady) {
@@ -698,9 +711,16 @@ void webInit() {
   server.on("/apn", HTTP_POST, handleApnPost);
   server.on("/generate_204", HTTP_ANY, handleCaptiveProbe);
   server.on("/gen_204", HTTP_ANY, handleCaptiveProbe);
+  server.on("/connectivity-check", HTTP_ANY, handleCaptiveProbe);
+  server.on("/mobile/status.php", HTTP_ANY, handleCaptiveProbe);
+  server.on("/check_network_status.txt", HTTP_ANY, handleCaptiveProbe);
   server.on("/hotspot-detect.html", HTTP_ANY, handleCaptiveProbe);
+  server.on("/library/test/success.html", HTTP_ANY, handleCaptiveProbe);
+  server.on("/kindle-wifi/wifistub.html", HTTP_ANY, handleCaptiveProbe);
   server.on("/success.txt", HTTP_ANY, handleCaptiveProbe);
   server.on("/connecttest.txt", HTTP_ANY, handleCaptiveProbe);
+  server.on("/msftconnecttest/connecttest.txt", HTTP_ANY, handleCaptiveProbe);
+  server.on("/msftncsi/ncsi.txt", HTTP_ANY, handleCaptiveProbe);
   server.on("/redirect", HTTP_ANY, handleCaptiveProbe);
   server.on("/canonical.html", HTTP_ANY, handleCaptiveProbe);
   server.on("/fwlink", HTTP_ANY, handleCaptiveProbe);

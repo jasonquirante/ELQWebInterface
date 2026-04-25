@@ -13,8 +13,8 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
-constexpr int LTE_UART_RX_PIN = 3; // RX0
-constexpr int LTE_UART_TX_PIN = 1; // TX0
+constexpr int LTE_UART_RX_PIN = 17; // RX0
+constexpr int LTE_UART_TX_PIN = 16; // TX0
 constexpr int LTE_PWRKEY_PIN = 4;
 constexpr uint32_t LTE_BAUD = 115200;
 constexpr uint32_t LTE_BAUD_FALLBACKS[] = {115200, 9600, 57600, 38400};
