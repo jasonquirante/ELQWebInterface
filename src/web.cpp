@@ -366,20 +366,21 @@ void sendCaptiveLandingPage() {
 }
 
 // Forward declarations
-void handlePortalPage();
-
-void handleRoot() {
-  handlePortalPage();
-}
-
 void handlePortalPage() {
+  // Try to serve index.html from SD card first (from docs folder)
   if (tryServeFromSd("/index.html")) {
     return;
   }
+  // Try SPIFFS as fallback
   if (tryServeFromSpiffs("/index.html")) {
     return;
   }
+  // Fallback to inline portal HTML
   sendCaptiveLandingPage();
+}
+
+void handleRoot() {
+  handlePortalPage();
 }
 
 void handleStatus() {
@@ -661,7 +662,6 @@ void handleNotFound() {
   handlePortalPage();
   return;
 }
-}  // namespace
 
 void webInit() {
   WiFi.mode(WIFI_AP);
@@ -750,3 +750,4 @@ void webLoop() {
   }
   server.handleClient();
 }
+}  // namespace
