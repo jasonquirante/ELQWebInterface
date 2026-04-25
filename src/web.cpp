@@ -1,37 +1,28 @@
 #include "web.h"
 
 #include <Arduino.h>
+#include <SD.h>
 #include <WiFi.h>
 #include <WebServer.h>
 #include <DNSServer.h>
-#include <SPIFFS.h>
-#include <SD.h>
-#include <ArduinoJson.h>
 
+#include "gps.h"
 #include "lte.h"
 
+extern bool sdCardAvailable;
+
 namespace {
-constexpr const char* kApSsid = "ELQWifi";
-constexpr uint8_t kApChannel = 6;
-constexpr uint8_t kApHidden = 0;
-constexpr uint8_t kDnsPort = 53;
-const IPAddress kApIp(192, 168, 4, 1);
-const IPAddress kApGateway(192, 168, 4, 1);
-const IPAddress kApNetmask(255, 255, 255, 0);
+constexpr const char* AP_SSID = "ELQWifi";
+constexpr uint8_t DNS_PORT = 53;
+constexpr bool FORCE_CAPTIVE_PORTAL = true;
+const IPAddress AP_IP(192, 168, 4, 1);
+const IPAddress AP_GATEWAY(192, 168, 4, 1);
+const IPAddress AP_NETMASK(255, 255, 255, 0);
 
 WebServer server(80);
 DNSServer dnsServer;
 bool dnsCaptiveActive = false;
 bool portalSignedIn = false;
-bool spiffsReady = false;
-unsigned long activeSessionUntilMs = 0;
-String activeVoucherCode;
-
-const char* kGpsLogPath = "/gps_log.csv";
-const char* kSessionLogPath = "/sessions.log";
-const char* kSmsLogPath = "/sms_messages.json";
-const char* kVouchersJsonPath = "/data/vouchers.json";
-const char* kSessionsJsonPath = "/data/sessions.json";
 
 bool isInternetReady() {
   const LteData lte = lteGetData();
@@ -39,715 +30,859 @@ bool isInternetReady() {
 }
 
 bool shouldUseCaptivePortal() {
-  return true;
-}
-
-bool hasActiveVoucherSession() {
-  return activeSessionUntilMs != 0 && millis() < activeSessionUntilMs;
-}
-
-String htmlEscape(const String& value) {
-  String escaped;
-  escaped.reserve(value.length() + 16);
-  for (size_t i = 0; i < value.length(); ++i) {
-    const char ch = value[i];
-    switch (ch) {
-      case '&': escaped += "&amp;"; break;
-      case '<': escaped += "&lt;"; break;
-      case '>': escaped += "&gt;"; break;
-      case '"': escaped += "&quot;"; break;
-      case '\'': escaped += "&#39;"; break;
-      default: escaped += ch; break;
-    }
-  }
-  return escaped;
-}
-
-String escapeJson(const String& value) {
-  String escaped;
-  escaped.reserve(value.length() + 16);
-  for (size_t i = 0; i < value.length(); ++i) {
-    const char ch = value[i];
-    switch (ch) {
-      case '"': escaped += "\\\""; break;
-      case '\\': escaped += "\\\\"; break;
-      case '\n': escaped += "\\n"; break;
-      case '\r': escaped += "\\r"; break;
-      case '\t': escaped += "\\t"; break;
-      default: escaped += ch; break;
-    }
-  }
-  return escaped;
-}
-
-String resolveRequestField(const JsonDocument& req, const char* key, const String& fallback = "") {
-  if (req.containsKey(key)) {
-    const JsonVariantConst value = req[key];
-    if (!value.isNull()) {
-      return String(value.as<const char*>());
-    }
-  }
-  if (server.hasArg(key)) {
-    return server.arg(key);
-  }
-  return fallback;
-}
-
-String getContentType(const String& path) {
-  if (path.endsWith(".html")) return "text/html";
-  if (path.endsWith(".css")) return "text/css";
-  if (path.endsWith(".js")) return "application/javascript";
-  if (path.endsWith(".svg")) return "image/svg+xml";
-  if (path.endsWith(".png")) return "image/png";
-  if (path.endsWith(".jpg") || path.endsWith(".jpeg")) return "image/jpeg";
-  if (path.endsWith(".json")) return "application/json";
-  return "text/plain";
-}
-
-bool tryServeFromSpiffs(const String& requestPath) {
-  if (!spiffsReady) {
+  if (portalSignedIn) {
     return false;
   }
-
-  String path = requestPath;
-  if (path.length() == 0 || path == "/") {
-    path = "/index.html";
-  }
-
-  if (SPIFFS.exists(path)) {
-    File file = SPIFFS.open(path, FILE_READ);
-    if (!file) {
-      return false;
-    }
-    Serial.print("[WEB] Serving from SPIFFS: ");
-    Serial.println(path);
-    server.streamFile(file, getContentType(path));
-    file.close();
-    return true;
-  }
-
-  if (SPIFFS.exists(path + ".html")) {
-    File file = SPIFFS.open(path + ".html", FILE_READ);
-    if (!file) {
-      return false;
-    }
-    Serial.print("[WEB] Serving from SPIFFS: ");
-    Serial.println(path + ".html");
-    server.streamFile(file, "text/html");
-    file.close();
-    return true;
-  }
-
-  return false;
+  return FORCE_CAPTIVE_PORTAL || !isInternetReady();
 }
 
-bool tryServeFromSd(const String& requestPath) {
-  String path = requestPath;
-  if (path.length() == 0 || path == "/") {
-    path = "/index.html";
+void sendPortalRedirect() {
+  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  server.sendHeader("Pragma", "no-cache");
+  server.sendHeader("Expires", "-1");
+  server.sendHeader("X-Captive-Portal", "true");
+  server.sendHeader("Captive-Portal", "true");
+  server.sendHeader("X-Captive-Portal-Error", "Disconnected");
+  server.sendHeader("Location", "http://192.168.4.1/");
+  server.send(302, "text/plain", "Redirecting to captive portal...");
+}
+
+void sendPortalLandingPage() {
+  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  server.sendHeader("Pragma", "no-cache");
+  server.sendHeader("Expires", "-1");
+  server.sendHeader("X-Captive-Portal", "true");
+  server.sendHeader("Captive-Portal", "true");
+  server.sendHeader("Content-Type", "text/html; charset=utf-8");
+  
+  const String html = String(
+    "<!DOCTYPE html>\n"
+    "<html>\n"
+    "<head>\n"
+    "<meta charset='utf-8'>\n"
+    "<meta name='viewport' content='width=device-width,initial-scale=1'>\n"
+    "<title>ELQDrone Setup</title>\n"
+    "<style>\n"
+    "body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; }\n"
+    "#container { background: white; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); padding: 40px; max-width: 500px; width: 100%; }\n"
+    "h1 { color: #333; margin: 0 0 20px 0; text-align: center; }\n"
+    "p { color: #666; line-height: 1.6; }\n"
+    ".status { background: #f0f4ff; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #667eea; }\n"
+    ".info { font-size: 14px; color: #999; text-align: center; margin-top: 20px; }\n"
+    "</style>\n"
+    "</head>\n"
+    "<body>\n"
+    "<div id='container'>\n"
+    "<h1>ELQWifi Network</h1>\n"
+    "<p>You are connected to the <strong>ELQWifi</strong> access point.</p>\n"
+    "<div class='status'>\n"
+    "<strong>Network Status:</strong><br>\n"
+    "Setting up internet gateway...\n"
+    "</div>\n"
+    "<p>This is a captive portal. Your connection will be upgraded to internet access once the LTE modem connects.</p>\n"
+    "<p>You can configure the device at <a href='http://192.168.4.1/'>http://192.168.4.1/</a></p>\n"
+    "<div class='info'>Portal ready. Keep this tab open while setup completes.</div>\n"
+    "</body>\n"
+    "</html>\n"
+  );
+  
+  server.send(200, "text/html; charset=utf-8", html);
+}
+
+String jsonEscape(const String& input) {
+  auto appendHex4 = [](String& target, uint8_t value) {
+    static const char* hex = "0123456789ABCDEF";
+    target += "\\u00";
+    target += hex[(value >> 4) & 0x0F];
+    target += hex[value & 0x0F];
+  };
+
+  String out;
+  out.reserve(input.length() + 16);
+  for (size_t i = 0; i < input.length(); ++i) {
+    const uint8_t uc = static_cast<uint8_t>(input[i]);
+    const char c = static_cast<char>(uc);
+    switch (c) {
+      case '\\':
+        out += "\\\\";
+        break;
+      case '"':
+        out += "\\\"";
+        break;
+      case '\n':
+        out += "\\n";
+        break;
+      case '\r':
+        out += "\\r";
+        break;
+      case '\t':
+        out += "\\t";
+        break;
+      default:
+        if (uc < 0x20 || uc == 0x7F) {
+          appendHex4(out, uc);
+        } else {
+          out += c;
+        }
+        break;
+    }
+  }
+  return out;
+}
+
+String extractJsonStringField(const String& json, const char* key) {
+  const String quotedKey = String("\"") + key + "\"";
+  const int keyPos = json.indexOf(quotedKey);
+  if (keyPos == -1) {
+    return "";
   }
 
-  String candidates[4];
-  size_t candidateCount = 0;
-  candidates[candidateCount++] = path;
-  if (path.startsWith("/portal/")) {
-    candidates[candidateCount++] = path.substring(strlen("/portal"));
+  const int colonPos = json.indexOf(':', keyPos + quotedKey.length());
+  if (colonPos == -1) {
+    return "";
   }
 
-  const String roots[4] = {"/www", "/sd/www", "", "/sd"};
-  for (size_t i = 0; i < 4; ++i) {
-    for (size_t c = 0; c < candidateCount; ++c) {
-      const String effectivePath = candidates[c];
-      String sdPath = roots[i] + effectivePath;
-      if (SD.exists(sdPath)) {
-        File file = SD.open(sdPath, FILE_READ);
-        if (!file) {
-          continue;
-        }
-        Serial.print("[WEB] Serving from SD: ");
-        Serial.println(sdPath);
-        server.streamFile(file, getContentType(effectivePath));
-        file.close();
-        return true;
-      }
+  int firstQuote = json.indexOf('"', colonPos + 1);
+  if (firstQuote == -1) {
+    return "";
+  }
 
-      sdPath = roots[i] + effectivePath + ".html";
-      if (SD.exists(sdPath)) {
-        File file = SD.open(sdPath, FILE_READ);
-        if (!file) {
-          continue;
-        }
-        Serial.print("[WEB] Serving from SD: ");
-        Serial.println(sdPath);
-        server.streamFile(file, "text/html");
-        file.close();
-        return true;
+  String value;
+  bool escaping = false;
+  for (int i = firstQuote + 1; i < json.length(); ++i) {
+    const char c = json[i];
+    if (escaping) {
+      switch (c) {
+        case 'n':
+          value += '\n';
+          break;
+        case 'r':
+          value += '\r';
+          break;
+        case 't':
+          value += '\t';
+          break;
+        default:
+          value += c;
+          break;
       }
+      escaping = false;
+      continue;
+    }
+
+    if (c == '\\') {
+      escaping = true;
+      continue;
+    }
+
+    if (c == '"') {
+      return value;
+    }
+
+    value += c;
+  }
+
+  return "";
+}
+
+bool extractJsonBoolField(const String& json, const char* key, bool defaultValue) {
+  const String quotedKey = String("\"") + key + "\"";
+  const int keyPos = json.indexOf(quotedKey);
+  if (keyPos == -1) {
+    return defaultValue;
+  }
+
+  const int colonPos = json.indexOf(':', keyPos + quotedKey.length());
+  if (colonPos == -1) {
+    return defaultValue;
+  }
+
+  const String tail = json.substring(colonPos + 1);
+  if (tail.indexOf("true") == 0) {
+    return true;
+  }
+  if (tail.indexOf("false") == 0) {
+    return false;
+  }
+  return defaultValue;
+}
+
+String buildSmsTemplate(const String& senderName, const String& senderContact, const String& message,
+                        bool includeLocation, bool includeMapLink = true) {
+  const GpsData gps = gpsGetData();
+
+  String composed;
+  composed.reserve(200);
+  composed += "ELQDrone\n";
+
+  composed += "From:";
+  composed += senderName.length() > 0 ? senderName : String("Unknown");
+  if (senderContact.length() > 0) {
+    composed += " ";
+    composed += senderContact;
+  }
+  composed += "\n";
+
+  if (includeLocation && gps.hasFix) {
+    composed += "Loc:";
+    composed += String(gps.latitude, 6);
+    composed += ",";
+    composed += String(gps.longitude, 6);
+    composed += "\n";
+    if (includeMapLink) {
+      composed += "Map:https://maps.google.com/?q=";
+      composed += String(gps.latitude, 6);
+      composed += ",";
+      composed += String(gps.longitude, 6);
+      composed += "\n";
     }
   }
 
-  return false;
+  composed += "Msg:";
+  composed += message;
+  return composed;
 }
 
-String readSdFileSnippet(const char* path, size_t maxLen) {
+String normalizePhoneNumber(String input) {
+  input.trim();
+
+  String cleaned;
+  cleaned.reserve(input.length());
+  for (int i = 0; i < input.length(); ++i) {
+    const char c = input[i];
+    if ((c >= '0' && c <= '9') || (c == '+' && cleaned.length() == 0)) {
+      cleaned += c;
+    }
+  }
+
+  if (cleaned.startsWith("+63") && cleaned.length() == 13) {
+    return cleaned;
+  }
+
+  if (cleaned.startsWith("63") && cleaned.length() == 12) {
+    return String("+") + cleaned;
+  }
+
+  if (cleaned.startsWith("09") && cleaned.length() == 11) {
+    return String("+63") + cleaned.substring(1);
+  }
+
+  if (cleaned.startsWith("9") && cleaned.length() == 10) {
+    return String("+63") + cleaned;
+  }
+
+  return cleaned;
+}
+
+String smsTrimToSingleSegment(const String& message, bool& truncated) {
+  truncated = false;
+  if (message.length() <= 160) {
+    return message;
+  }
+  truncated = true;
+  return message.substring(0, 157) + "...";
+}
+
+String extractQuotedToken(const String& input, int tokenIndex) {
+  int current = -1;
+  int start = -1;
+
+  for (int i = 0; i < input.length(); ++i) {
+    if (input[i] != '"') {
+      continue;
+    }
+
+    if (start == -1) {
+      start = i + 1;
+      current++;
+      continue;
+    }
+
+    if (current == tokenIndex) {
+      return input.substring(start, i);
+    }
+    start = -1;
+  }
+
+  return "";
+}
+
+String parseCmglToJsonArray(const String& cmglRaw) {
+  String normalized = cmglRaw;
+  normalized.replace("\r", "");
+
+  String json = "[";
+  bool hasAny = false;
+
+  String line;
+  String currentIndex;
+  String currentStatus;
+  String currentNumber;
+  String currentTimestamp;
+  String currentBody;
+  bool hasCurrent = false;
+
+  auto flushCurrent = [&]() {
+    if (!hasCurrent) {
+      return;
+    }
+
+    currentBody.trim();
+    if (hasAny) {
+      json += ",";
+    }
+    hasAny = true;
+    json += "{";
+    json += "\"index\":\"" + jsonEscape(currentIndex) + "\"";
+    json += ",\"status\":\"" + jsonEscape(currentStatus) + "\"";
+    json += ",\"number\":\"" + jsonEscape(currentNumber) + "\"";
+    json += ",\"timestamp\":\"" + jsonEscape(currentTimestamp) + "\"";
+    json += ",\"body\":\"" + jsonEscape(currentBody) + "\"";
+    json += "}";
+
+    hasCurrent = false;
+    currentIndex = "";
+    currentStatus = "";
+    currentNumber = "";
+    currentTimestamp = "";
+    currentBody = "";
+  };
+
+  for (int i = 0; i <= normalized.length(); ++i) {
+    const bool isLineEnd = (i == normalized.length()) || (normalized[i] == '\n');
+    if (!isLineEnd) {
+      line += normalized[i];
+      continue;
+    }
+
+    String trimmed = line;
+    trimmed.trim();
+    line = "";
+
+    if (trimmed.length() == 0) {
+      continue;
+    }
+
+    if (trimmed.startsWith("+CMGL:")) {
+      flushCurrent();
+
+      const int colon = trimmed.indexOf(':');
+      const int firstComma = trimmed.indexOf(',', colon + 1);
+      currentIndex = firstComma > (colon + 1) ? trimmed.substring(colon + 1, firstComma) : "";
+      currentIndex.trim();
+      currentStatus = extractQuotedToken(trimmed, 0);
+      currentNumber = extractQuotedToken(trimmed, 1);
+      currentTimestamp = extractQuotedToken(trimmed, 3);
+      hasCurrent = true;
+      continue;
+    }
+
+    if (trimmed == "OK") {
+      continue;
+    }
+
+    if (hasCurrent) {
+      if (currentBody.length() > 0) {
+        currentBody += "\n";
+      }
+      currentBody += trimmed;
+    }
+  }
+
+  flushCurrent();
+  json += "]";
+  return json;
+}
+
+String readFileContent(const char* path, size_t maxBytes = 4096) {
+  if (!sdCardAvailable) {
+    return "";
+  }
+
   File file = SD.open(path, FILE_READ);
   if (!file) {
     return "";
   }
 
   String content;
-  content.reserve(maxLen + 1);
-  while (file.available() && content.length() < maxLen) {
+  while (file.available() && content.length() < maxBytes) {
     content += static_cast<char>(file.read());
   }
   file.close();
   return content;
 }
 
-void sendJson(const String& payload) {
-  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  server.send(200, "application/json", payload);
-}
-
-File openSdFileAnyRoot(const char* relativePath, const char* mode) {
-  const String roots[2] = {"", "/sd"};
-  for (size_t i = 0; i < 2; ++i) {
-    String full = roots[i] + String(relativePath);
-    File f = SD.open(full, mode);
-    if (f) {
-      return f;
-    }
+String contentTypeFor(const String& path) {
+  if (path.endsWith(".html")) {
+    return "text/html";
   }
-  return File();
+  if (path.endsWith(".css")) {
+    return "text/css";
+  }
+  if (path.endsWith(".js")) {
+    return "application/javascript";
+  }
+  if (path.endsWith(".json")) {
+    return "application/json";
+  }
+  if (path.endsWith(".csv")) {
+    return "text/csv";
+  }
+  return "text/plain";
 }
 
-bool readJsonFromSd(const char* relativePath, JsonDocument& doc) {
-  File file = openSdFileAnyRoot(relativePath, FILE_READ);
+bool serveFromSd(const String& requestPath) {
+  if (!sdCardAvailable) {
+    return false;
+  }
+
+  String path = requestPath;
+  if (path == "/") {
+    path = "/www/index.html";
+  } else if (!path.startsWith("/www/") && !path.startsWith("/api/") &&
+             !path.startsWith("/gps") && !path.startsWith("/netinfo") &&
+             !path.startsWith("/logs")) {
+    path = "/www" + path;
+  }
+
+  if (!SD.exists(path.c_str())) {
+    return false;
+  }
+
+  File file = SD.open(path.c_str(), FILE_READ);
   if (!file) {
     return false;
   }
-  const DeserializationError err = deserializeJson(doc, file);
+
+  server.streamFile(file, contentTypeFor(path));
   file.close();
-  return !err;
-}
-
-bool writeJsonToSd(const char* relativePath, const JsonDocument& doc) {
-  const String roots[2] = {"", "/sd"};
-  for (size_t i = 0; i < 2; ++i) {
-    const String full = roots[i] + String(relativePath);
-    if (SD.exists(full)) {
-      SD.remove(full);
-    }
-    File file = SD.open(full, FILE_WRITE);
-    if (!file) {
-      continue;
-    }
-    serializeJson(doc, file);
-    file.close();
-    return true;
-  }
-  return false;
-}
-
-String isoTimestamp() {
-  const unsigned long totalSeconds = millis() / 1000UL;
-  const unsigned long seconds = totalSeconds % 60UL;
-  const unsigned long minutes = (totalSeconds / 60UL) % 60UL;
-  const unsigned long hours = (totalSeconds / 3600UL) % 24UL;
-  char buffer[24];
-  snprintf(buffer, sizeof(buffer), "2026-04-24 %02lu:%02lu:%02lu", hours, minutes, seconds);
-  return String(buffer);
-}
-
-bool appendSmsRecord(const String& number, const String& body, const String& status) {
-  JsonDocument doc;
-  if (!readJsonFromSd(kSmsLogPath, doc)) {
-    doc.to<JsonArray>();
-  }
-
-  JsonArray arr = doc.as<JsonArray>();
-  if (arr.isNull()) {
-    arr = doc.to<JsonArray>();
-  }
-
-  JsonObject entry = arr.add<JsonObject>();
-  entry["index"] = arr.size();
-  entry["status"] = status;
-  entry["number"] = number;
-  entry["timestamp"] = isoTimestamp();
-  entry["body"] = body;
-
-  return writeJsonToSd(kSmsLogPath, doc);
-}
-
-bool findVoucher(const String& code, int& limitMinutes, int& limitMb) {
-  JsonDocument doc;
-  if (!readJsonFromSd(kVouchersJsonPath, doc)) {
-    return false;
-  }
-  JsonArray arr = doc.as<JsonArray>();
-  if (arr.isNull()) {
-    return false;
-  }
-  for (JsonObject obj : arr) {
-    const String voucherCode = String(obj["code"] | "");
-    if (voucherCode.equalsIgnoreCase(code)) {
-      limitMinutes = obj["limit_minutes"] | 60;
-      limitMb = obj["limit_mb"] | 500;
-      return true;
-    }
-  }
-  return false;
-}
-
-bool appendSession(const String& code, int limitMinutes, int limitMb) {
-  JsonDocument doc;
-  if (!readJsonFromSd(kSessionsJsonPath, doc)) {
-    doc.to<JsonArray>();
-  }
-
-  JsonArray arr = doc.as<JsonArray>();
-  if (arr.isNull()) {
-    arr = doc.to<JsonArray>();
-  }
-
-  JsonObject entry = arr.add<JsonObject>();
-  entry["code"] = code;
-  entry["limit_minutes"] = limitMinutes;
-  entry["limit_mb"] = limitMb;
-  entry["start_ms"] = millis();
-  entry["active"] = true;
-
-  return writeJsonToSd(kSessionsJsonPath, doc);
-}
-
-void sendPortalRedirect() {
-  Serial.println("[WEB] Redirecting client to /portal/");
-  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  server.sendHeader("Pragma", "no-cache");
-  server.sendHeader("Expires", "-1");
-  server.sendHeader("Location", "http://192.168.4.1/portal/");
-  server.send(302, "text/plain", "Redirecting to captive portal...");
-}
-
-void sendCaptiveLandingPage() {
-  Serial.println("[WEB] Serving inline captive fallback page.");
-  const LteData status = lteGetData();
-  String html;
-  html.reserve(3800);
-  html += "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>ELQWifi Portal</title>";
-  html += "<style>body{margin:0;font-family:Verdana,sans-serif;background:linear-gradient(135deg,#d8efe8 0%,#f9f7ee 100%);color:#173231;}";
-  html += ".wrap{max-width:900px;margin:0 auto;padding:20px;}";
-  html += ".hero{background:#124734;color:#e8fff6;padding:20px;border-radius:14px;box-shadow:0 10px 25px rgba(18,71,52,.2);}";
-  html += ".grid{display:grid;grid-template-columns:1fr;gap:14px;margin-top:14px;}@media(min-width:840px){.grid{grid-template-columns:1fr 1fr;}}";
-  html += ".card{background:#fff;border-radius:12px;padding:16px;box-shadow:0 8px 18px rgba(0,0,0,.08);}dt{font-weight:700;margin-top:8px;}dd{margin:4px 0 8px;}";
-  html += "input,button{font-size:14px;padding:10px;border-radius:8px;border:1px solid #b8cec4;}button{background:#1f6e50;color:#fff;border:none;cursor:pointer;}";
-  html += "small{opacity:.85;}</style></head><body><div class=\"wrap\">";
-  html += "<div class=\"hero\"><h1 style=\"margin:0 0 8px\">ELQWifi Captive Portal</h1>";
-  html += "<div>SSID: <strong>" + String(kApSsid) + "</strong> | Gateway: <strong>" + WiFi.softAPIP().toString() + "</strong></div>";
-  html += "<small>Open this page to monitor LTE status and update APN.</small></div>";
-  html += "<div class=\"grid\">";
-  html += "<div class=\"card\"><h2 style=\"margin-top:0\">LTE Status</h2><dl>";
-  html += "<dt>Modem responsive</dt><dd>" + String(status.responsive ? "yes" : "no") + "</dd>";
-  html += "<dt>SIM ready</dt><dd>" + String(status.simReady ? "yes" : "no") + "</dd>";
-  html += "<dt>Data connected</dt><dd>" + String(status.dataConnected ? "yes" : "no") + "</dd>";
-  html += "<dt>APN</dt><dd>" + htmlEscape(status.apn) + "</dd>";
-  html += "<dt>IP</dt><dd>" + htmlEscape(status.ipAddress) + "</dd>";
-  html += "<dt>RSSI</dt><dd>" + String(status.rssi) + "</dd>";
-  html += "<dt>CGATT</dt><dd>" + String(status.cgatt) + "</dd>";
-  html += "</dl></div>";
-  html += "<div class=\"card\"><h2 style=\"margin-top:0\">APN Setup</h2>";
-  html += "<form method=\"POST\" action=\"/apn\">";
-  html += "<label for=\"apn\">APN</label><br><input id=\"apn\" name=\"apn\" value=\"" + htmlEscape(status.apn) + "\" style=\"width:100%;box-sizing:border-box\"><br><br>";
-  html += "<button type=\"submit\">Save APN</button></form>";
-  html += "<p><small>Common PH APNs: tm, internet, internet.globe.com.ph, mnet</small></p>";
-  html += "<p><a href=\"/status\">JSON status</a></p></div></div></div></body></html>";
-  server.send(200, "text/html", html);
-}
-
-// Forward declarations
-void handlePortalPage() {
-  // Try to serve index.html from SD card first (from docs folder)
-  if (tryServeFromSd("/index.html")) {
-    return;
-  }
-  // Try SPIFFS as fallback
-  if (tryServeFromSpiffs("/index.html")) {
-    return;
-  }
-  // Fallback to inline portal HTML
-  sendCaptiveLandingPage();
-}
-
-void handleRoot() {
-  handlePortalPage();
-}
-
-void handleStatus() {
-  const LteData status = lteGetData();
-  String payload;
-  payload.reserve(256);
-  payload += "{";
-  payload += "\"responsive\":" + String(status.responsive ? "true" : "false");
-  payload += ",\"simReady\":" + String(status.simReady ? "true" : "false");
-  payload += ",\"dataConnected\":" + String(status.dataConnected ? "true" : "false");
-  payload += ",\"pdpActive\":" + String(status.pdpActive ? "true" : "false");
-  payload += ",\"rssi\":" + String(status.rssi);
-  payload += ",\"cgatt\":" + String(status.cgatt);
-  payload += ",\"apn\":\"" + escapeJson(status.apn) + "\"";
-  payload += ",\"ipAddress\":\"" + escapeJson(status.ipAddress) + "\"";
-  payload += "}";
-  sendJson(payload);
-}
-
-void handlePortalStatus() {
-  const LteData status = lteGetData();
-  const bool online = isInternetReady() && hasActiveVoucherSession();
-  String reason = "Waiting for modem";
-  if (!status.responsive) {
-    reason = "No AT response";
-  } else if (!status.simReady) {
-    reason = "SIM not ready";
-  } else if (!status.pdpActive) {
-    reason = "PDP inactive (check APN)";
-  } else if (status.cgatt != 1) {
-    reason = "Packet not attached";
-  } else if (!hasActiveVoucherSession()) {
-    reason = "Voucher required";
-  } else {
-    reason = "PPP not established yet";
-  }
-
-  String payload;
-  payload.reserve(220);
-  payload += "{\"ok\":true,\"signedIn\":";
-  payload += (portalSignedIn || online) ? "true" : "false";
-  payload += ",\"online\":";
-  payload += online ? "true" : "false";
-  payload += ",\"reason\":\"" + escapeJson(reason) + "\"";
-  payload += ",\"voucher\":\"" + escapeJson(activeVoucherCode) + "\"";
-  payload += ",\"pdpActive\":" + String(status.pdpActive ? "true" : "false");
-  payload += ",\"cgatt\":" + String(status.cgatt);
-  payload += ",\"ipAddress\":\"" + escapeJson(status.ipAddress) + "\"";
-  payload += "}";
-  sendJson(payload);
-}
-
-void handlePortalSignin() {
-  String voucherCode;
-  if (server.hasArg("plain")) {
-    JsonDocument req;
-    if (!deserializeJson(req, server.arg("plain"))) {
-      voucherCode = String(req["code"] | "");
-    }
-  }
-  if (voucherCode.length() == 0 && server.hasArg("code")) {
-    voucherCode = server.arg("code");
-  }
-  voucherCode.trim();
-
-  if (voucherCode.length() == 0) {
-    sendJson("{\"ok\":false,\"reason\":\"Voucher code required\"}");
-    return;
-  }
-
-  int limitMinutes = 0;
-  int limitMb = 0;
-  if (!findVoucher(voucherCode, limitMinutes, limitMb)) {
-    sendJson("{\"ok\":false,\"reason\":\"Invalid voucher\"}");
-    return;
-  }
-
-  if (!appendSession(voucherCode, limitMinutes, limitMb)) {
-    sendJson("{\"ok\":false,\"reason\":\"Failed to persist session\"}");
-    return;
-  }
-
-  portalSignedIn = true;
-  activeVoucherCode = voucherCode;
-  activeSessionUntilMs = millis() + static_cast<unsigned long>(limitMinutes) * 60000UL;
-  lteStartInternetGateway();
-  handlePortalStatus();
-}
-
-void handleSmsInbox() {
-  JsonDocument doc;
-  if (!readJsonFromSd(kSmsLogPath, doc)) {
-    sendJson("{\"ok\":true,\"messages\":[]}");
-    return;
-  }
-
-  JsonArray arr = doc.as<JsonArray>();
-  if (arr.isNull()) {
-    sendJson("{\"ok\":true,\"messages\":[]}");
-    return;
-  }
-
-  String payload;
-  payload.reserve(512);
-  payload += "{\"ok\":true,\"messages\":";
-  serializeJson(arr, payload);
-  payload += "}";
-  sendJson(payload);
-}
-
-void handleSmsSend() {
-  JsonDocument req;
-  if (server.hasArg("plain")) {
-    if (deserializeJson(req, server.arg("plain"))) {
-      sendJson("{\"ok\":false,\"error\":\"Invalid JSON body\"}");
-      return;
-    }
-  }
-
-  const String to = resolveRequestField(req, "to");
-  const String message = resolveRequestField(req, "message");
-  const String senderName = resolveRequestField(req, "senderName");
-  const String senderContact = resolveRequestField(req, "senderContact");
-
-  if (to.length() == 0 || message.length() == 0) {
-    sendJson("{\"ok\":false,\"error\":\"Phone number and message are required\"}");
-    return;
-  }
-
-  String outbound = message;
-  bool truncated = false;
-  if (outbound.length() > 160) {
-    outbound = outbound.substring(0, 160);
-    truncated = true;
-  }
-
-  String modemResponse;
-  bool modemSent = false;
-  String sendNote = "Queued locally for delivery";
-  if (!lteDataModeActive()) {
-    modemSent = lteSendSms(to, outbound, modemResponse);
-    if (modemSent) {
-      sendNote = "Submitted to modem successfully";
-    } else if (modemResponse.length() > 0) {
-      sendNote = "Queued locally; modem send failed";
-    }
-  } else {
-    sendNote = "Queued locally while data mode is active";
-  }
-
-  const String status = modemSent ? "SENT" : "QUEUED";
-  (void)appendSmsRecord(to, outbound, status);
-
-  String payload;
-  payload.reserve(384);
-  payload += "{\"ok\":true";
-  payload += ",\"to\":\"" + escapeJson(to) + "\"";
-  payload += ",\"response\":\"" + escapeJson(modemResponse.length() > 0 ? modemResponse : sendNote) + "\"";
-  payload += ",\"truncated\":";
-  payload += truncated ? "true" : "false";
-  payload += ",\"usedLocationFallback\":false";
-  payload += ",\"sent\":";
-  payload += modemSent ? "true" : "false";
-  payload += ",\"senderName\":\"" + escapeJson(senderName) + "\"";
-  payload += ",\"senderContact\":\"" + escapeJson(senderContact) + "\"";
-  payload += ",\"queued\":";
-  payload += modemSent ? "false" : "true";
-  payload += "}";
-  sendJson(payload);
-}
-
-void handleModemHealth() {
-  const LteData status = lteGetData();
-  String payload;
-  payload.reserve(280);
-  payload += "{\"ok\":true";
-  payload += ",\"signalQuality\":\"";
-  payload += (status.rssi >= -85) ? "Excellent" : (status.rssi >= -95) ? "Good" : (status.rssi >= -105) ? "Fair" : "Weak";
-  payload += "\"";
-  payload += ",\"rssi\":" + String(status.rssi);
-  payload += ",\"creg\":" + String(status.creg);
-  payload += ",\"cereg\":" + String(status.cereg);
-  payload += ",\"cgatt\":" + String(status.cgatt);
-  payload += ",\"simReady\":" + String(status.simReady ? "true" : "false");
-  payload += ",\"dataConnected\":" + String(status.dataConnected ? "true" : "false");
-  payload += ",\"pdpActive\":" + String(status.pdpActive ? "true" : "false");
-  payload += ",\"ipAddress\":\"" + escapeJson(status.ipAddress) + "\"";
-  payload += "}";
-  sendJson(payload);
+  return true;
 }
 
 void handleGps() {
-  const LteGpsData gps = lteGetGpsData();
-  String payload;
-  payload.reserve(360);
-  payload += "{\"gnssActive\":";
-  payload += gps.gnssActive ? "true" : "false";
-  payload += ",\"hasFix\":";
-  payload += gps.hasFix ? "true" : "false";
+  (void)gpsRefreshNow();
+  const GpsData gps = gpsGetData();
+
+  String payload = "{";
+  payload += "\"hasFix\":" + String(gps.hasFix ? "true" : "false");
   payload += ",\"fixType\":" + String(gps.fixType);
-  payload += ",\"satellites\":" + String(gps.satellites);
+  payload += ",\"satellites\":" + String(gps.satellitesUsed);
   payload += ",\"latitude\":" + String(gps.latitude, 6);
   payload += ",\"longitude\":" + String(gps.longitude, 6);
   payload += ",\"altitudeMeters\":" + String(gps.altitudeMeters, 2);
   payload += ",\"speedKph\":" + String(gps.speedKph, 2);
-  payload += ",\"raw\":\"" + escapeJson(gps.raw) + "\"}";
-  sendJson(payload);
+  payload += ",\"utcDate\":\"" + jsonEscape(gps.utcDate) + "\"";
+  payload += ",\"utcTime\":\"" + jsonEscape(gps.utcTime) + "\"";
+  payload += ",\"raw\":\"" + jsonEscape(gps.rawInfo) + "\"";
+  payload += "}";
+
+  server.send(200, "application/json", payload);
 }
 
 void handleNetInfo() {
-  const LteData status = lteGetData();
-  String payload;
-  payload.reserve(260);
-  payload += "{\"dataConnected\":" + String(status.dataConnected ? "true" : "false");
-  payload += ",\"rssi\":" + String(status.rssi);
-  payload += ",\"simReady\":" + String(status.simReady ? "true" : "false");
-  payload += ",\"pdpActive\":" + String(status.pdpActive ? "true" : "false");
-  payload += ",\"creg\":" + String(status.creg);
-  payload += ",\"cereg\":" + String(status.cereg);
-  payload += ",\"cgatt\":" + String(status.cgatt);
-  payload += ",\"downloadMbps\":0";
-  payload += ",\"uploadMbps\":0";
-  payload += ",\"apn\":\"" + escapeJson(status.apn) + "\"";
-  payload += ",\"ipAddress\":\"" + escapeJson(status.ipAddress) + "\"";
+  const LteData lte = lteGetData();
+
+  String payload = "{";
+  payload += "\"responsive\":" + String(lte.responsive ? "true" : "false");
+  payload += ",\"simReady\":" + String(lte.simReady ? "true" : "false");
+  payload += ",\"dataConnected\":" + String(lte.dataConnected ? "true" : "false");
+  payload += ",\"rssi\":" + String(lte.rssi);
+  payload += ",\"ber\":" + String(lte.ber);
+  payload += ",\"creg\":" + String(lte.creg);
+  payload += ",\"cereg\":" + String(lte.cereg);
+  payload += ",\"cgatt\":" + String(lte.cgatt);
+  payload += ",\"apn\":\"" + jsonEscape(lte.apn) + "\"";
+  payload += ",\"ipAddress\":\"" + jsonEscape(lte.ipAddress) + "\"";
+  payload += ",\"downloadMbps\":-1";
+  payload += ",\"uploadMbps\":-1";
+  payload += ",\"note\":\"Speed test not yet implemented on modem side\"";
   payload += "}";
-  sendJson(payload);
+
+  server.send(200, "application/json", payload);
 }
 
 void handleLogs() {
-  const String gpsLog = readSdFileSnippet(kGpsLogPath, 3000);
-  const String sessionLog = readSdFileSnippet(kSessionLogPath, 3000);
+  const String gpsLog = readFileContent("/gps_log.csv");
+  const String sessionLog = readFileContent("/sessions.log");
 
-  String payload;
-  payload.reserve(6400);
-  payload += "{\"gpsLog\":\"" + escapeJson(gpsLog) + "\"";
-  payload += ",\"sessionLog\":\"" + escapeJson(sessionLog) + "\"";
+  String payload = "{";
+  payload += "\"gpsLog\":\"" + jsonEscape(gpsLog) + "\"";
+  payload += ",\"sessionLog\":\"" + jsonEscape(sessionLog) + "\"";
   payload += "}";
-  sendJson(payload);
+
+  server.send(200, "application/json", payload);
 }
 
-void handleGpsTest() {
-  const LteData status = lteGetData();
-  String payload;
-  payload.reserve(220);
-  payload += "{\"ok\":true,\"response\":\"GPS RF test endpoint is informational in this build\"";
-  payload += ",\"modemState\":{";
-  payload += "\"rssi\":" + String(status.rssi);
-  payload += ",\"creg\":" + String(status.creg);
-  payload += ",\"cereg\":" + String(status.cereg);
-  payload += ",\"cgatt\":" + String(status.cgatt);
-  payload += "}}";
-  sendJson(payload);
+void handlePortalSignIn() {
+  portalSignedIn = true;
+  lteStartInternetGateway();
+  server.send(200, "application/json", "{\"ok\":true,\"signedIn\":true}");
 }
 
-void handleCaptiveProbe() {
-  handlePortalPage();
+void handlePortalStatus() {
+  String payload = "{";
+  payload += "\"signedIn\":" + String(portalSignedIn ? "true" : "false");
+  payload += ",\"captiveActive\":" + String(shouldUseCaptivePortal() ? "true" : "false");
+  payload += "}";
+  server.send(200, "application/json", payload);
 }
 
-void handleApnPost() {
-  if (!server.hasArg("apn")) {
-    server.send(400, "text/plain", "Missing apn field");
+void handleModemHealth() {
+  const LteData lte = lteGetData();
+  const unsigned long uptime = millis();
+
+  String payload = "{";
+  payload += "\"ok\":true";
+  payload += ",\"timestamp\":" + String(millis());
+  payload += ",\"uptime\":" + String(uptime / 1000);
+  payload += ",\"responsive\":" + String(lte.responsive ? "true" : "false");
+  payload += ",\"simReady\":" + String(lte.simReady ? "true" : "false");
+  payload += ",\"dataConnected\":" + String(lte.dataConnected ? "true" : "false");
+  payload += ",\"rssi\":" + String(lte.rssi);
+  payload += ",\"csq\":" + String(lte.rssi);
+  payload += ",\"ber\":" + String(lte.ber);
+  payload += ",\"creg\":" + String(lte.creg);
+  payload += ",\"cereg\":" + String(lte.cereg);
+  payload += ",\"cgatt\":" + String(lte.cgatt);
+  payload += ",\"apn\":\"" + jsonEscape(lte.apn) + "\"";
+  payload += ",\"ipAddress\":\"" + jsonEscape(lte.ipAddress) + "\"";
+  payload += ",\"signalQuality\":\"";
+  if (lte.rssi >= -85) payload += "Excellent";
+  else if (lte.rssi >= -95) payload += "Good";
+  else if (lte.rssi >= -105) payload += "Fair";
+  else if (lte.rssi >= -115) payload += "Weak";
+  else payload += "No signal";
+  payload += "\"";
+  payload += "}";
+
+  server.send(200, "application/json", payload);
+}
+
+void handleGpsInterferenceTest() {
+  const String action = server.arg("action");
+  
+  if (action.length() == 0) {
+    server.send(400, "application/json", "{\"ok\":false,\"error\":\"Missing action parameter (on/off)\"}");
     return;
   }
-  const String apn = server.arg("apn");
-  lteSetApn(apn);
-  server.sendHeader("Location", "/");
-  server.send(303, "text/plain", "APN updated");
+
+  String modemResponse;
+  bool ok = false;
+  
+  if (action == "off") {
+    // Disable GNSS/GPS on SIM7600G
+    ok = lteSendCommand("AT+CGNSPWR=0", modemResponse, 2000);
+    delay(1000);
+  } else if (action == "on") {
+    // Enable GNSS/GPS on SIM7600G
+    ok = lteSendCommand("AT+CGNSPWR=1", modemResponse, 2000);
+    delay(1000);
+  } else {
+    server.send(400, "application/json", "{\"ok\":false,\"error\":\"Invalid action. Use on or off\"}");
+    return;
+  }
+
+  const LteData lte = lteGetData();
+  
+  String payload = "{";
+  payload += "\"ok\":" + String(ok ? "true" : "false");
+  payload += ",\"action\":\"" + jsonEscape(action) + "\"";
+  payload += ",\"response\":\"" + jsonEscape(modemResponse) + "\"";
+  payload += ",\"modemState\":{";
+  payload += "\"rssi\":" + String(lte.rssi);
+  payload += ",\"creg\":" + String(lte.creg);
+  payload += ",\"cereg\":" + String(lte.cereg);
+  payload += ",\"cgatt\":" + String(lte.cgatt);
+  payload += ",\"simReady\":" + String(lte.simReady ? "true" : "false");
+  payload += ",\"dataConnected\":" + String(lte.dataConnected ? "true" : "false");
+  payload += "}";
+  payload += "}";
+
+  server.send(ok ? 200 : 500, "application/json", payload);
+}
+
+void handleSmsSend() {
+  String to = server.arg("to");
+  String message = server.arg("message");
+  String senderName = server.arg("senderName");
+  String senderContact = server.arg("senderContact");
+  bool includeLocation = true;
+
+  const String body = server.arg("plain");
+  if (body.length() > 0) {
+    const String jsonTo = extractJsonStringField(body, "to");
+    const String jsonMessage = extractJsonStringField(body, "message");
+    const String jsonSenderName = extractJsonStringField(body, "senderName");
+    const String jsonSenderContact = extractJsonStringField(body, "senderContact");
+    if (jsonTo.length() > 0) {
+      to = jsonTo;
+    }
+    if (jsonMessage.length() > 0) {
+      message = jsonMessage;
+    }
+    if (jsonSenderName.length() > 0) {
+      senderName = jsonSenderName;
+    }
+    if (jsonSenderContact.length() > 0) {
+      senderContact = jsonSenderContact;
+    }
+    includeLocation = extractJsonBoolField(body, "includeLocation", true);
+  }
+
+  to = normalizePhoneNumber(to);
+  message.trim();
+  senderName.trim();
+  senderContact.trim();
+
+  if (to.length() == 0 || message.length() == 0) {
+    server.send(400, "application/json", "{\"ok\":false,\"error\":\"Missing to/message\"}");
+    return;
+  }
+
+  if (to.length() < 10) {
+    server.send(400, "application/json", "{\"ok\":false,\"error\":\"Invalid destination number\"}");
+    return;
+  }
+
+  const LteData net = lteGetData();
+  const bool isCircuitRegistered = (net.creg == 1 || net.creg == 5);
+  const bool isPacketRegistered = (net.cereg == 1 || net.cereg == 5);
+  if (!net.simReady || (!isCircuitRegistered && !isPacketRegistered)) {
+    String err = "{\"ok\":false,\"error\":\"Network not ready for SMS";
+    err += " (SIM=" + String(net.simReady ? "ready" : "not-ready");
+    err += ", CREG=" + String(net.creg);
+    err += ", CEREG=" + String(net.cereg) + ")\"}";
+    server.send(503, "application/json", err);
+    return;
+  }
+
+  String composedMessage = buildSmsTemplate(senderName, senderContact, message, includeLocation, false);
+  bool truncated = false;
+  composedMessage = smsTrimToSingleSegment(composedMessage, truncated);
+
+  String modemResponse;
+  bool ok = lteSendSms(to, composedMessage, modemResponse);
+  bool usedLocationFallback = false;
+  String fallbackReason = "";
+
+  // Fallback: If send failed with location block, retry without location entirely.
+  if (!ok && includeLocation) {
+    bool noLocTruncated = false;
+    String noLocMessage = buildSmsTemplate(senderName, senderContact, message, false, false);
+    noLocMessage = smsTrimToSingleSegment(noLocMessage, noLocTruncated);
+
+    String noLocResponse;
+    const bool noLocOk = lteSendSms(to, noLocMessage, noLocResponse);
+    if (noLocOk) {
+      ok = true;
+      usedLocationFallback = true;
+      fallbackReason = "Retried without location";
+      truncated = noLocTruncated;
+      composedMessage = noLocMessage;
+      modemResponse = noLocResponse;
+    } else {
+      modemResponse += "\n[retry-without-location]\n";
+      modemResponse += noLocResponse;
+    }
+  }
+
+  String payload = "{";
+  payload += "\"ok\":" + String(ok ? "true" : "false");
+  payload += ",\"to\":\"" + jsonEscape(to) + "\"";
+  payload += ",\"template\":\"" + jsonEscape(composedMessage) + "\"";
+  payload += ",\"length\":" + String(composedMessage.length());
+  payload += ",\"truncated\":" + String(truncated ? "true" : "false");
+  payload += ",\"usedLocationFallback\":" + String(usedLocationFallback ? "true" : "false");
+  payload += ",\"fallbackReason\":\"" + jsonEscape(fallbackReason) + "\"";
+  payload += ",\"response\":\"" + jsonEscape(modemResponse) + "\"";
+  payload += "}";
+
+  if (ok) {
+    server.send(200, "application/json", payload);
+  } else {
+    server.send(500, "application/json", payload);
+  }
+}
+
+void handleSmsInbox() {
+  String response;
+
+  if (!lteSendCommand("AT+CMGF=1", response, 2500)) {
+    server.send(500, "application/json", "{\"ok\":false,\"error\":\"Failed to set SMS text mode\"}");
+    return;
+  }
+
+  if (!lteSendCommand("AT+CMGL=\"ALL\"", response, 8000)) {
+    String payload = "{";
+    payload += "\"ok\":false";
+    payload += ",\"error\":\"Failed to query inbox\"";
+    payload += ",\"response\":\"" + jsonEscape(response) + "\"";
+    payload += "}";
+    server.send(500, "application/json", payload);
+    return;
+  }
+
+  String payload = "{";
+  payload += "\"ok\":true";
+  payload += ",\"messagesRaw\":\"" + jsonEscape(response) + "\"";
+  payload += ",\"messages\":" + parseCmglToJsonArray(response);
+  payload += "}";
+  server.send(200, "application/json", payload);
+}
+
+void handleRoot() {
+  if (shouldUseCaptivePortal()) {
+    // Only advertise captive mode while upstream internet is unavailable.
+    server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    server.sendHeader("Pragma", "no-cache");
+    server.sendHeader("Expires", "-1");
+    server.sendHeader("X-Captive-Portal", "true");
+    server.sendHeader("Captive-Portal", "true");
+  }
+  
+  if (serveFromSd("/")) {
+    return;
+  }
+
+  sendPortalLandingPage();
 }
 
 void handleNotFound() {
-  if (tryServeFromSd(server.uri())) {
+  if (serveFromSd(server.uri())) {
     return;
   }
 
-  if (tryServeFromSpiffs(server.uri())) {
+  if (shouldUseCaptivePortal()) {
+    // Captive portal: redirect unknown paths only when internet is down.
+    sendPortalRedirect();
     return;
   }
 
-  handlePortalPage();
-  return;
+  server.send(404, "text/plain", "Not found");
 }
+
+void handleCaptiveProbe() {
+  if (shouldUseCaptivePortal()) {
+    // Fast-connect + captive: return OS-expected probe responses to avoid
+    // repeated network-state flips while keeping captive DNS active.
+    const String uri = server.uri();
+    server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    server.sendHeader("Pragma", "no-cache");
+    server.sendHeader("Expires", "-1");
+
+    if (uri == "/ncsi.txt") {
+      server.send(200, "text/plain", "Microsoft NCSI");
+      return;
+    }
+    if (uri == "/connecttest.txt") {
+      server.send(200, "text/plain", "Microsoft Connect Test");
+      return;
+    }
+    if (uri == "/hotspot-detect.html" || uri == "/library/test/success.html" ||
+        uri == "/success.txt" || uri == "/captive.html") {
+      server.send(200, "text/html", "<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>");
+      return;
+    }
+
+    server.send(204, "text/plain", "");
+    return;
+  }
+
+  const String uri = server.uri();
+  if (uri == "/ncsi.txt") {
+    server.send(200, "text/plain", "Microsoft NCSI");
+    return;
+  }
+  if (uri == "/connecttest.txt") {
+    server.send(200, "text/plain", "Microsoft Connect Test");
+    return;
+  }
+  if (uri == "/hotspot-detect.html" || uri == "/library/test/success.html" ||
+      uri == "/success.txt" || uri == "/captive.html") {
+    server.send(200, "text/html", "<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>");
+    return;
+  }
+
+  server.send(204, "text/plain", "");
+}
+}  // namespace
 
 void webInit() {
   WiFi.mode(WIFI_AP);
-  const bool apConfigOk = WiFi.softAPConfig(kApIp, kApGateway, kApNetmask);
-  const bool apStarted = WiFi.softAP(kApSsid, nullptr, kApChannel, kApHidden);
-  delay(200);
-
-  if (!apConfigOk) {
-    Serial.println("[WEB] softAPConfig failed.");
-  }
-  if (!apStarted) {
-    Serial.println("[WEB] softAP start failed.");
-  }
+  WiFi.setSleep(false);
+  WiFi.softAPConfig(AP_IP, AP_GATEWAY, AP_NETMASK);
+  WiFi.softAP(AP_SSID);
 
   Serial.print("[WEB] AP SSID: ");
-  Serial.println(kApSsid);
-  Serial.print("[WEB] AP started: ");
-  Serial.println(apStarted ? "yes" : "no");
-  Serial.print("[WEB] AP hidden: ");
-  Serial.println(kApHidden ? "yes" : "no");
-  Serial.print("[WEB] AP configured channel: ");
-  Serial.println(kApChannel);
-  Serial.print("[WEB] AP current channel: ");
-  Serial.println(WiFi.channel());
+  Serial.println(AP_SSID);
   Serial.print("[WEB] AP IP: ");
   Serial.println(WiFi.softAPIP());
-  Serial.print("[WEB] AP MAC: ");
-  Serial.println(WiFi.softAPmacAddress());
 
-  spiffsReady = SPIFFS.begin(true);
-  if (spiffsReady) {
-    Serial.println("[WEB] SPIFFS mounted (/data assets available after Upload File System Image).");
-  } else {
-    Serial.println("[WEB] SPIFFS mount failed, using fallback inline portal page.");
-  }
-
-  server.on("/", HTTP_ANY, handleRoot);
-  server.on("/portal", HTTP_ANY, handlePortalPage);
-  server.on("/portal/", HTTP_ANY, handlePortalPage);
-  server.on("/status", HTTP_ANY, handleStatus);
-  server.on("/portal/status", HTTP_GET, handlePortalStatus);
-  server.on("/portal/signin", HTTP_POST, handlePortalSignin);
-  server.on("/sms/inbox", HTTP_GET, handleSmsInbox);
-  server.on("/sms/send", HTTP_POST, handleSmsSend);
-  server.on("/modem/health", HTTP_GET, handleModemHealth);
-  server.on("/modem/gps-test", HTTP_POST, handleGpsTest);
   server.on("/gps", HTTP_GET, handleGps);
   server.on("/netinfo", HTTP_GET, handleNetInfo);
+  server.on("/modem/health", HTTP_GET, handleModemHealth);
+  server.on("/modem/gps-test", HTTP_POST, handleGpsInterferenceTest);
   server.on("/logs", HTTP_GET, handleLogs);
-  server.on("/apn", HTTP_POST, handleApnPost);
+  server.on("/portal/signin", HTTP_POST, handlePortalSignIn);
+  server.on("/portal/status", HTTP_GET, handlePortalStatus);
+  server.on("/sms/send", HTTP_POST, handleSmsSend);
+  server.on("/sms/inbox", HTTP_GET, handleSmsInbox);
+  server.on("/", HTTP_GET, handleRoot);
+  server.on("/portal", HTTP_GET, handleRoot);
+  server.on("/portal/", HTTP_GET, handleRoot);
+
+  // Captive portal probe endpoints for major clients.
+  // Android
   server.on("/generate_204", HTTP_ANY, handleCaptiveProbe);
   server.on("/gen_204", HTTP_ANY, handleCaptiveProbe);
-  server.on("/connectivity-check", HTTP_ANY, handleCaptiveProbe);
-  server.on("/mobile/status.php", HTTP_ANY, handleCaptiveProbe);
-  server.on("/check_network_status.txt", HTTP_ANY, handleCaptiveProbe);
+  server.on("/gstatic/generate_204", HTTP_ANY, handleCaptiveProbe);
+  
+  // Apple / iOS
   server.on("/hotspot-detect.html", HTTP_ANY, handleCaptiveProbe);
   server.on("/library/test/success.html", HTTP_ANY, handleCaptiveProbe);
-  server.on("/kindle-wifi/wifistub.html", HTTP_ANY, handleCaptiveProbe);
   server.on("/success.txt", HTTP_ANY, handleCaptiveProbe);
-  server.on("/connecttest.txt", HTTP_ANY, handleCaptiveProbe);
-  server.on("/msftconnecttest/connecttest.txt", HTTP_ANY, handleCaptiveProbe);
-  server.on("/msftncsi/ncsi.txt", HTTP_ANY, handleCaptiveProbe);
-  server.on("/redirect", HTTP_ANY, handleCaptiveProbe);
-  server.on("/canonical.html", HTTP_ANY, handleCaptiveProbe);
-  server.on("/fwlink", HTTP_ANY, handleCaptiveProbe);
+  server.on("/captive.html", HTTP_ANY, handleCaptiveProbe);
+  
+  // Windows / NCSI
   server.on("/ncsi.txt", HTTP_ANY, handleCaptiveProbe);
-  server.onNotFound(handleNotFound);
-  server.begin();
+  server.on("/connecttest.txt", HTTP_ANY, handleCaptiveProbe);
+  
+  // Generic / Browser
+  server.on("/redirect", HTTP_ANY, handleCaptiveProbe);
+  server.on("/fwlink", HTTP_ANY, handleCaptiveProbe);
+  server.on("/favicon.ico", HTTP_ANY, handleCaptiveProbe);
+  server.on("/apple-touch-icon.png", HTTP_ANY, handleCaptiveProbe);
+  server.on("/wpad.dat", HTTP_ANY, handleCaptiveProbe);
+  
+  // Google / Ubuntu
+  server.on("/chrome-variations/seed", HTTP_ANY, handleCaptiveProbe);
+  server.on("/canonical.html", HTTP_ANY, handleCaptiveProbe);
 
-  dnsServer.start(kDnsPort, "*", kApIp);
-  dnsCaptiveActive = true;
+  server.onNotFound(handleNotFound);
+
+  server.begin();
   Serial.println("[WEB] HTTP server started.");
-  Serial.println("[WEB] Captive DNS started.");
+
+  // Start in captive mode by default until LTE internet is available.
+  dnsServer.start(DNS_PORT, "*", AP_IP);
+  dnsCaptiveActive = true;
+  Serial.println("[WEB] DNS captive portal started.");
 }
 
 void webLoop() {
-  const bool captive = shouldUseCaptivePortal();
-  if (captive && !dnsCaptiveActive) {
-    dnsServer.start(kDnsPort, "*", kApIp);
+  const bool shouldBeCaptive = shouldUseCaptivePortal();
+  if (shouldBeCaptive && !dnsCaptiveActive) {
+    dnsServer.start(DNS_PORT, "*", AP_IP);
     dnsCaptiveActive = true;
-    Serial.println("[WEB] Captive DNS enabled.");
+    Serial.println("[WEB] DNS captive portal enabled (no internet).");
+  } else if (!shouldBeCaptive && dnsCaptiveActive) {
+    dnsServer.stop();
+    dnsCaptiveActive = false;
+    Serial.println("[WEB] DNS captive portal disabled (internet ready).");
   }
 
   if (dnsCaptiveActive) {
-    dnsServer.processNextRequest();
+    dnsServer.processNextRequest();  // Handle DNS queries only in captive mode
   }
   server.handleClient();
 }
-}  // namespace

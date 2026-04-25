@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0f1f2b" />
+    <title>ELQDrone Mission Console</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero panel">
+        <div class="hero-copy">
+          <div class="eyebrow">ESP32 / SIM7600G / SD</div>
+          <h1>ELQDrone Mission Console</h1>
+          <p>
+            Live flight telemetry, cellular diagnostics, and SD-backed logs rendered
+            directly from the ESP32.
+          </p>
+        </div>
+
+        <div class="hero-metrics">
+          <div class="metric">
+            <span class="metric-label">Wi-Fi</span>
+            <span id="wifiStatus" class="status-pill neutral">Connecting</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Last update</span>
+            <span id="lastUpdated" class="metric-value">--</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">GPS ping age</span>
+            <span id="lastGpsPingAge" class="metric-value">--</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">SD host</span>
+            <span class="metric-value">/www</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="stats-grid">
+        <article class="panel stat-card">
+          <span class="stat-label">GPS</span>
+          <strong id="gpsStatus" class="stat-value status-pill neutral">Waiting</strong>
+          <div id="gpsCoords" class="stat-detail mono">--</div>
+        </article>
+
+        <article class="panel stat-card">
+          <span class="stat-label">LTE</span>
+          <strong id="lteStatus" class="stat-value status-pill neutral">Waiting</strong>
+          <div id="rssi" class="stat-detail">RSSI --</div>
+          <div id="internetState" class="stat-detail">APN -- · waiting for session</div>
+        </article>
+
+        <article class="panel stat-card">
+          <span class="stat-label">SIM</span>
+          <strong id="simReady" class="stat-value">--</strong>
+          <div id="registered" class="stat-detail">CREG --</div>
+        </article>
+
+        <article class="panel stat-card">
+          <span class="stat-label">Attach</span>
+          <strong id="attached" class="stat-value">--</strong>
+          <div id="speed" class="stat-detail">DL / UL -- / --</div>
+        </article>
+      </section>
+
+      <section class="content-grid">
+        <article class="panel main-panel">
+          <div class="panel-head">
+            <h2>Navigation</h2>
+            <a id="gpsMap" href="#" target="_blank" rel="noopener">Open map</a>
+          </div>
+          <div class="map-box">
+            <div class="map-label">Current fix</div>
+            <div id="gpsCoordsLarge" class="map-value mono">--</div>
+            <div id="gpsDistance" class="map-distance">--</div>
+            <div id="gpsHint" class="map-hint">Waiting for satellites...</div>
+          </div>
+        </article>
+
+        <article class="panel side-panel">
+          <div class="panel-head">
+            <h2>Session logs</h2>
+          </div>
+          <pre id="logs">Loading logs...</pre>
+        </article>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>
