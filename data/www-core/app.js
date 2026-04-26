@@ -469,27 +469,9 @@ async function refreshNet() {
   setStatus("lteStatus", net.dataConnected, lteText);
   setText("lteAboutStatus", lteText);
   setText("rssi", `RSSI ${net.rssi}`);
-
-  let simText = "SIM status unknown";
-  if (!net.responsive) {
-    simText = "SIM status unknown (modem offline)";
-  } else if (net.simReady) {
-    simText = "SIM ready";
-  } else {
-    simText = "SIM not ready / missing";
-  }
-  setText("simReady", simText);
-
+  setText("simReady", net.simReady ? "SIM ready" : "SIM missing");
   setText("registered", `CREG ${net.creg} · CEREG ${net.cereg}`);
-
-  let attachText = "Attach unknown";
-  if (net.cgatt === 1) {
-    attachText = "Attached";
-  } else if (net.cgatt === 0) {
-    attachText = "Detached";
-  }
-  setText("attached", attachText);
-
+  setText("attached", net.cgatt ? "Attached" : "Detached");
   setText("speed", `${net.downloadMbps} / ${net.uploadMbps} Mbps`);
   setText("internetState", net.dataConnected ? `APN ${net.apn} · IP ${net.ipAddress || "--"}` : `APN ${net.apn || "--"} · waiting for session`);
 }

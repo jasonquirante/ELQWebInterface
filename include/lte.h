@@ -19,6 +19,7 @@ struct LteData {
 void lteInit();
 void lteLoop();
 bool lteIsResponsive();
+bool lteRecoverNow();
 bool lteDataModeActive();
 void lteStartInternetGateway();
 void lteSetApn(const String& apn);

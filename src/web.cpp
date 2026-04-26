@@ -22,7 +22,6 @@ const IPAddress AP_NETMASK(255, 255, 255, 0);
 WebServer server(80);
 DNSServer dnsServer;
 bool dnsCaptiveActive = false;
-bool portalSignedIn = false;
 
 bool isInternetReady() {
   const LteData lte = lteGetData();
@@ -30,21 +29,7 @@ bool isInternetReady() {
 }
 
 bool shouldUseCaptivePortal() {
-  if (portalSignedIn) {
-    return false;
-  }
   return FORCE_CAPTIVE_PORTAL || !isInternetReady();
-}
-
-void sendPortalRedirect() {
-  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  server.sendHeader("Pragma", "no-cache");
-  server.sendHeader("Expires", "-1");
-  server.sendHeader("X-Captive-Portal", "true");
-  server.sendHeader("Captive-Portal", "true");
-  server.sendHeader("X-Captive-Portal-Error", "Disconnected");
-  server.sendHeader("Location", "http://192.168.4.1/");
-  server.send(302, "text/plain", "Redirecting to captive portal...");
 }
 
 void sendPortalLandingPage() {
@@ -484,6 +469,65 @@ void handleGps() {
   server.send(200, "application/json", payload);
 }
 
+String buildGpsDiagCommandResult(const char* cmd, uint32_t timeoutMs) {
+  String response;
+  const bool ok = lteSendCommand(cmd, response, timeoutMs);
+
+  String payload = "{";
+  payload += "\"cmd\":\"" + jsonEscape(String(cmd)) + "\"";
+  payload += ",\"ok\":" + String(ok ? "true" : "false");
+  payload += ",\"response\":\"" + jsonEscape(response) + "\"";
+  payload += "}";
+  return payload;
+}
+
+void handleGpsDiag() {
+  bool recoveryAttempted = false;
+  bool recoveryOk = false;
+
+  if (!lteIsResponsive()) {
+    recoveryAttempted = true;
+    recoveryOk = lteRecoverNow();
+  }
+
+  (void)gpsRefreshNow();
+  const GpsData gps = gpsGetData();
+  const LteData lte = lteGetData();
+
+  String payload = "{";
+  payload += "\"ok\":true";
+  payload += ",\"recoveryAttempted\":" + String(recoveryAttempted ? "true" : "false");
+  payload += ",\"recoveryOk\":" + String(recoveryOk ? "true" : "false");
+  payload += ",\"gps\":{";
+  payload += "\"hasFix\":" + String(gps.hasFix ? "true" : "false");
+  payload += ",\"fixType\":" + String(gps.fixType);
+  payload += ",\"satellites\":" + String(gps.satellitesUsed);
+  payload += ",\"latitude\":" + String(gps.latitude, 6);
+  payload += ",\"longitude\":" + String(gps.longitude, 6);
+  payload += ",\"raw\":\"" + jsonEscape(gps.rawInfo) + "\"";
+  payload += "}";
+  payload += ",\"modem\":{";
+  payload += "\"responsive\":" + String(lte.responsive ? "true" : "false");
+  payload += ",\"simReady\":" + String(lte.simReady ? "true" : "false");
+  payload += ",\"creg\":" + String(lte.creg);
+  payload += ",\"cereg\":" + String(lte.cereg);
+  payload += ",\"cgatt\":" + String(lte.cgatt);
+  payload += ",\"rssi\":" + String(lte.rssi);
+  payload += "}";
+  payload += ",\"commands\":[";
+  payload += buildGpsDiagCommandResult("AT+CGNSPWR?", 2000);
+  payload += ",";
+  payload += buildGpsDiagCommandResult("AT+CGNSINF", 2500);
+  payload += ",";
+  payload += buildGpsDiagCommandResult("AT+CGNSSINFO", 2500);
+  payload += ",";
+  payload += buildGpsDiagCommandResult("AT+CGPSINFO", 2500);
+  payload += "]";
+  payload += "}";
+
+  server.send(200, "application/json", payload);
+}
+
 void handleNetInfo() {
   const LteData lte = lteGetData();
 
@@ -519,14 +563,13 @@ void handleLogs() {
 }
 
 void handlePortalSignIn() {
-  portalSignedIn = true;
   lteStartInternetGateway();
   server.send(200, "application/json", "{\"ok\":true,\"signedIn\":true}");
 }
 
 void handlePortalStatus() {
   String payload = "{";
-  payload += "\"signedIn\":" + String(portalSignedIn ? "true" : "false");
+  payload += "\"signedIn\":false";
   payload += ",\"captiveActive\":" + String(shouldUseCaptivePortal() ? "true" : "false");
   payload += "}";
   server.send(200, "application/json", payload);
@@ -711,19 +754,63 @@ void handleSmsSend() {
 
 void handleSmsInbox() {
   String response;
+  String diagnostics;
 
   if (!lteSendCommand("AT+CMGF=1", response, 2500)) {
-    server.send(500, "application/json", "{\"ok\":false,\"error\":\"Failed to set SMS text mode\"}");
+    String payload = "{";
+    payload += "\"ok\":false";
+    payload += ",\"error\":\"Failed to set SMS text mode\"";
+    payload += ",\"response\":\"" + jsonEscape(response) + "\"";
+    payload += "}";
+    server.send(200, "application/json", payload);
     return;
   }
 
-  if (!lteSendCommand("AT+CMGL=\"ALL\"", response, 8000)) {
+  String storageResp;
+  if (!lteSendCommand("AT+CPMS=\"SM\",\"SM\",\"SM\"", storageResp, 2500)) {
+    diagnostics += "[CPMS SM failed]\n";
+    diagnostics += storageResp;
+    diagnostics += "\n";
+    if (!lteSendCommand("AT+CPMS=\"ME\",\"ME\",\"ME\"", storageResp, 2500)) {
+      diagnostics += "[CPMS ME failed]\n";
+      diagnostics += storageResp;
+      diagnostics += "\n";
+    }
+  }
+
+  bool inboxOk = lteSendCommand("AT+CMGL=\"ALL\"", response, 8000);
+  if (!inboxOk) {
+    diagnostics += "[CMGL ALL failed]\n";
+    diagnostics += response;
+    diagnostics += "\n";
+
+    String alt;
+    if (lteSendCommand("AT+CMGL=\"REC UNREAD\"", alt, 8000)) {
+      inboxOk = true;
+      response = alt;
+    } else {
+      diagnostics += "[CMGL REC UNREAD failed]\n";
+      diagnostics += alt;
+      diagnostics += "\n";
+
+      if (lteSendCommand("AT+CMGL=\"REC READ\"", alt, 8000)) {
+        inboxOk = true;
+        response = alt;
+      } else {
+        diagnostics += "[CMGL REC READ failed]\n";
+        diagnostics += alt;
+        diagnostics += "\n";
+      }
+    }
+  }
+
+  if (!inboxOk) {
     String payload = "{";
     payload += "\"ok\":false";
     payload += ",\"error\":\"Failed to query inbox\"";
-    payload += ",\"response\":\"" + jsonEscape(response) + "\"";
+    payload += ",\"response\":\"" + jsonEscape(diagnostics) + "\"";
     payload += "}";
-    server.send(500, "application/json", payload);
+    server.send(200, "application/json", payload);
     return;
   }
 
@@ -810,6 +897,7 @@ void webInit() {
   Serial.println(WiFi.softAPIP());
 
   server.on("/gps", HTTP_GET, handleGps);
+  server.on("/gps/diag", HTTP_GET, handleGpsDiag);
   server.on("/netinfo", HTTP_GET, handleNetInfo);
   server.on("/modem/health", HTTP_GET, handleModemHealth);
   server.on("/modem/gps-test", HTTP_POST, handleGpsInterferenceTest);

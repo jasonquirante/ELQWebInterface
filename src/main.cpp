@@ -22,6 +22,8 @@ String atBridgeLineBuffer;
 bool txPatternMode = false;
 unsigned long lastTxPatternMs = 0;
 bool setupComplete = false;
+bool lteInitStarted = false;
+unsigned long lteInitEarliestMs = 0;
 
 bool isPathSafe(const String& path) {
   if (!path.startsWith("/")) {
@@ -526,9 +528,10 @@ void setup() {
   sdCardAvailable = initializeSdCard();
   Serial.println(sdCardAvailable ? "[SETUP] SD card ready." : "[SETUP] SD card unavailable; captive portal only.");
 
-  // Initialize modules that depend on modem order.
-  lteInit();
-  Serial.println("[SETUP] PPP gateway autostart is enabled when modem becomes responsive.");
+  // Defer LTE init to loop so serial upload mode can start promptly.
+  lteInitEarliestMs = millis() + 30000;
+  Serial.println("[SETUP] LTE init deferred to main loop.");
+  Serial.println("[SETUP] LTE init grace period: 30s for serial commands/upload mode.");
   gpsInit();
   Serial.println("[SETUP] System ready.");
 }
@@ -555,6 +558,12 @@ void loop() {
     // Keep UART dedicated to bridge traffic; background tasks can contend for AT channel.
     delay(5);
     return;
+  }
+
+  if (!lteInitStarted && millis() >= lteInitEarliestMs) {
+    lteInitStarted = true;
+    lteInit();
+    Serial.println("[SETUP] PPP gateway autostart is enabled when modem becomes responsive.");
   }
 
   lteLoop();

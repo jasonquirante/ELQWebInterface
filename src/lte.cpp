@@ -998,6 +998,20 @@ bool lteIsResponsive() {
   return modemResponsive;
 }
 
+bool lteRecoverNow() {
+  if (dataModeActive) {
+    return false;
+  }
+
+  if (modemResponsive) {
+    return true;
+  }
+
+  modemResponsive = recoverModemAndProbe();
+  currentLteData.responsive = modemResponsive;
+  return modemResponsive;
+}
+
 bool lteDataModeActive() {
   return dataModeActive;
 }

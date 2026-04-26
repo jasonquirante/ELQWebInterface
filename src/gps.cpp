@@ -126,17 +126,8 @@ bool lteNeedsPriority(const LteData& lte) {
     return true;
   }
 
-  const bool voiceRegistered = (lte.creg == 1 || lte.creg == 5);
-  const bool packetRegistered = (lte.cereg == 1 || lte.cereg == 5);
-
-  if (!voiceRegistered || !packetRegistered) {
-    return true;
-  }
-
-  if (lte.rssi <= -105) {
-    return true;
-  }
-
+  // Keep GNSS available even when LTE registration is unstable.
+  // The modem can still acquire satellites without full packet attach.
   return false;
 }
 
@@ -336,6 +327,16 @@ bool pollGnssLocation(bool logToSerial) {
       continue;
     }
 
+    const int colon = line.indexOf(':');
+    if (colon != -1) {
+      String payload = line.substring(colon + 1);
+      payload.trim();
+      payload.replace(",", "");
+      if (payload.length() == 0) {
+        continue;
+      }
+    }
+
     parseGnsInfo(line);
     gnssPowerOn = true;
 
@@ -395,6 +396,8 @@ void gpsLoop() {
 }
 
 bool gpsRefreshNow() {
+  enforceLteFirstCoexistence();
+  (void)ensureGnssPowerOn();
   return pollGnssLocation(false);
 }
 
