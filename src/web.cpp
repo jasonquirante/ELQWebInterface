@@ -61,6 +61,11 @@ void sendPortalLandingPage() {
     "<head>\n"
     "<meta charset='utf-8'>\n"
     "<meta name='viewport' content='width=device-width,initial-scale=1'>\n"
+    "<script>\n"
+    "if (window.location.hostname !== '192.168.4.1' || window.location.pathname !== '/') {\n"
+    "  window.location.replace('http://192.168.4.1/');\n"
+    "}\n"
+    "</script>\n"
     "<title>ELQDrone Setup</title>\n"
     "<style>\n"
     "body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; }\n"
@@ -753,8 +758,9 @@ void handleNotFound() {
   }
 
   if (shouldUseCaptivePortal()) {
-    // Captive portal: redirect unknown paths only when internet is down.
-    sendPortalRedirect();
+    // Captive portal: serve landing content directly to improve auto-open
+    // behavior on clients that do not follow redirects during probes.
+    sendPortalLandingPage();
     return;
   }
 
@@ -763,28 +769,13 @@ void handleNotFound() {
 
 void handleCaptiveProbe() {
   if (shouldUseCaptivePortal()) {
-    // Fast-connect + captive: return OS-expected probe responses to avoid
-    // repeated network-state flips while keeping captive DNS active.
-    const String uri = server.uri();
-    server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-    server.sendHeader("Pragma", "no-cache");
-    server.sendHeader("Expires", "-1");
-
-    if (uri == "/ncsi.txt") {
-      server.send(200, "text/plain", "Microsoft NCSI");
-      return;
-    }
-    if (uri == "/connecttest.txt") {
-      server.send(200, "text/plain", "Microsoft Connect Test");
-      return;
-    }
-    if (uri == "/hotspot-detect.html" || uri == "/library/test/success.html" ||
-        uri == "/success.txt" || uri == "/captive.html") {
-      server.send(200, "text/html", "<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>");
-      return;
-    }
-
-    server.send(204, "text/plain", "");
+    // Return landing content while captive mode is active so OS probe checks
+    // detect a login page and launch their captive portal assistant.
+    Serial.print("[WEB] Captive probe served portal: ");
+    Serial.print(server.uri());
+    Serial.print(" from ");
+    Serial.println(server.client().remoteIP());
+    sendPortalLandingPage();
     return;
   }
 

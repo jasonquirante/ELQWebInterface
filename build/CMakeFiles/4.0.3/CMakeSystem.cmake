@@ -3,7 +3,7 @@ set(CMAKE_HOST_SYSTEM_NAME "Windows")
 set(CMAKE_HOST_SYSTEM_VERSION "10.0.26120")
 set(CMAKE_HOST_SYSTEM_PROCESSOR "AMD64")
 
-include("C:/Users/espad/Documents/GitHub/ELQDrone/build/toolchain/toolchain-esp32.cmake")
+include("C:/Users/espad/Documents/GitHub/ELQWebInterface/build/toolchain/toolchain-esp32.cmake")
 
 set(CMAKE_SYSTEM "Generic")
 set(CMAKE_SYSTEM_NAME "Generic")
