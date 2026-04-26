@@ -892,6 +892,79 @@ pre {
   margin-bottom: 6px;
 }
 
+.application-card {
+  display: flex;
+  gap: 16px;
+  padding: 20px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(176, 223, 236, 0.22);
+  background: linear-gradient(180deg, rgba(3, 15, 21, 0.88), rgba(6, 24, 33, 0.78));
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.application-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(103, 244, 222, 0.36);
+}
+
+.app-icon {
+  width: 64px;
+  height: 64px;
+  min-width: 64px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(76, 201, 240, 0.2), rgba(47, 217, 255, 0.15));
+  border: 1px solid rgba(76, 201, 240, 0.3);
+  color: var(--teal);
+}
+
+.app-icon svg {
+  width: 32px;
+  height: 32px;
+}
+
+.app-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.app-info h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #dff9ff;
+}
+
+.app-description {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.6;
+  font-size: 0.95rem;
+}
+
+.app-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.feature-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(76, 201, 240, 0.25);
+  background: rgba(76, 201, 240, 0.1);
+  color: var(--teal);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
 .pulse {
   animation: pulse 1.8s ease-in-out infinite;
 }
