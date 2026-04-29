@@ -621,8 +621,7 @@ CONFIG_ESP_ROM_HAS_OUTPUT_PUTC_FUNC=y
 #
 # Serial flasher config
 #
-# default:
-# CONFIG_ESPTOOLPY_NO_STUB is not set
+CONFIG_ESPTOOLPY_NO_STUB=y
 # default:
 # CONFIG_ESPTOOLPY_FLASHMODE_QIO is not set
 # default:

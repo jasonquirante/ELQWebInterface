@@ -5,14 +5,14 @@ C:/Users/espad/Documents/GitHub/ELQWebInterface/build/CMakeFiles/save-defconfig.
 C:/Users/espad/Documents/GitHub/ELQWebInterface/build/CMakeFiles/flash.dir
 C:/Users/espad/Documents/GitHub/ELQWebInterface/build/CMakeFiles/bootloader.dir
 C:/Users/espad/Documents/GitHub/ELQWebInterface/build/CMakeFiles/_project_elf_src.dir
-C:/Users/espad/Documents/GitHub/ELQWebInterface/build/CMakeFiles/ELQDrone.elf.dir
+C:/Users/espad/Documents/GitHub/ELQWebInterface/build/CMakeFiles/RESQLinkDrone.elf.dir
 C:/Users/espad/Documents/GitHub/ELQWebInterface/build/CMakeFiles/size.dir
 C:/Users/espad/Documents/GitHub/ELQWebInterface/build/CMakeFiles/size-files.dir
 C:/Users/espad/Documents/GitHub/ELQWebInterface/build/CMakeFiles/size-components.dir
 C:/Users/espad/Documents/GitHub/ELQWebInterface/build/CMakeFiles/uf2.dir
 C:/Users/espad/Documents/GitHub/ELQWebInterface/build/CMakeFiles/uf2-app.dir
 C:/Users/espad/Documents/GitHub/ELQWebInterface/build/CMakeFiles/__ldgen_output_sections.ld.dir
-C:/Users/espad/Documents/GitHub/ELQWebInterface/build/CMakeFiles/gen_ELQDrone_binary.dir
+C:/Users/espad/Documents/GitHub/ELQWebInterface/build/CMakeFiles/gen_RESQLinkDrone_binary.dir
 C:/Users/espad/Documents/GitHub/ELQWebInterface/build/CMakeFiles/gen_project_binary.dir
 C:/Users/espad/Documents/GitHub/ELQWebInterface/build/CMakeFiles/app.dir
 C:/Users/espad/Documents/GitHub/ELQWebInterface/build/CMakeFiles/app-flash.dir

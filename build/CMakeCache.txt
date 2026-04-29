@@ -157,7 +157,7 @@ CMAKE_INSTALL_MANDIR:PATH=
 CMAKE_INSTALL_OLDINCLUDEDIR:PATH=/usr/include
 
 //Install path prefix, prepended onto install directories.
-CMAKE_INSTALL_PREFIX:PATH=C:/Program Files (x86)/ELQDrone
+CMAKE_INSTALL_PREFIX:PATH=C:/Program Files (x86)/RESQLinkDrone
 
 //Run-time variable data (LOCALSTATEDIR/run)
 CMAKE_INSTALL_RUNSTATEDIR:PATH=
@@ -213,7 +213,7 @@ CMAKE_PROJECT_DESCRIPTION:STATIC=
 CMAKE_PROJECT_HOMEPAGE_URL:STATIC=
 
 //Value Computed by CMake
-CMAKE_PROJECT_NAME:STATIC=ELQDrone
+CMAKE_PROJECT_NAME:STATIC=RESQLinkDrone
 
 //Value Computed by CMake
 CMAKE_PROJECT_VERSION:STATIC=4.0.0
@@ -301,15 +301,6 @@ CMAKE_VERBOSE_MAKEFILE:BOOL=FALSE
 //Disable package configuration, target export and installation
 DISABLE_PACKAGE_CONFIG_AND_INSTALL:BOOL=ON
 
-//Value Computed by CMake
-ELQDrone_BINARY_DIR:STATIC=C:/Users/espad/Documents/GitHub/ELQWebInterface/build
-
-//Value Computed by CMake
-ELQDrone_IS_TOP_LEVEL:STATIC=ON
-
-//Value Computed by CMake
-ELQDrone_SOURCE_DIR:STATIC=C:/Users/espad/Documents/GitHub/ELQWebInterface
-
 //Build TF-PSA-Crypto programs.
 ENABLE_PROGRAMS:BOOL=OFF
 
@@ -367,6 +358,15 @@ Mbed TLS_SOURCE_DIR:STATIC=C:/esp/v6.0/esp-idf/components/mbedtls/mbedtls
 
 //No help, variable specified on the command line.
 PYTHON_DEPS_CHECKED:UNINITIALIZED=1
+
+//Value Computed by CMake
+RESQLinkDrone_BINARY_DIR:STATIC=C:/Users/espad/Documents/GitHub/ELQWebInterface/build
+
+//Value Computed by CMake
+RESQLinkDrone_IS_TOP_LEVEL:STATIC=ON
+
+//Value Computed by CMake
+RESQLinkDrone_SOURCE_DIR:STATIC=C:/Users/espad/Documents/GitHub/ELQWebInterface
 
 //No help, variable specified on the command line.
 SDKCONFIG:UNINITIALIZED=c:\Users\espad\Documents\GitHub\ELQWebInterface\sdkconfig
@@ -636,7 +636,7 @@ FIND_PACKAGE_MESSAGE_DETAILS_Threads:INTERNAL=[TRUE][v()]
 //ADVANCED property for variable: GIT_EXECUTABLE
 GIT_EXECUTABLE-ADVANCED:INTERNAL=1
 //CMAKE_INSTALL_PREFIX during last run
-_GNUInstallDirs_LAST_CMAKE_INSTALL_PREFIX:INTERNAL=C:/Program Files (x86)/ELQDrone
+_GNUInstallDirs_LAST_CMAKE_INSTALL_PREFIX:INTERNAL=C:/Program Files (x86)/RESQLinkDrone
 //Compiler reason failure
 _Python3_Compiler_REASON_FAILURE:INTERNAL=
 //Development reason failure
