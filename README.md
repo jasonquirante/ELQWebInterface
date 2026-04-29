@@ -69,7 +69,7 @@ API endpoints:
 - `/logs` -> SD logs (`/gps_log.csv`, `/sessions.log`)
 
 Web server behavior:
-- ESP32 starts a Wi-Fi AP: `ELQDrone`
+- ESP32 starts a Wi-Fi AP: `ELQWifi`
 - Open network (no password)
 - Browse to `http://192.168.4.1`
 - No captive-portal redirects are installed, so the AP behaves like a normal local-only network.

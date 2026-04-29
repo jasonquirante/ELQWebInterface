@@ -1166,6 +1166,26 @@ bool lteHangupCall(String& modemResponse) {
   return lteSendCommand("AT+CHUP", modemResponse, 4000);
 }
 
+void lteInitBridge() {
+  Serial.println("\n[LTE] ========== SIM7600G BRIDGE INIT ==========");
+  Serial.print("[LTE] UART RX pin: GPIO");
+  Serial.print(LTE_UART_RX_PIN);
+  Serial.print(", TX pin: GPIO");
+  Serial.print(LTE_UART_TX_PIN);
+  Serial.print(", PWRKEY pin: GPIO");
+  Serial.print(LTE_PWRKEY_PIN);
+  Serial.print(", Baud: ");
+  Serial.println(LTE_BAUD);
+
+  lteSerial.begin(LTE_BAUD, SERIAL_8N1, LTE_UART_RX_PIN, LTE_UART_TX_PIN, false);
+  webLoop();
+  delay(200);
+
+  pinMode(LTE_PWRKEY_PIN, OUTPUT);
+  digitalWrite(LTE_PWRKEY_PIN, HIGH);
+  Serial.println("[LTE] Bridge UART initialized; modem probes disabled.");
+}
+
 void lteInit() {
   Serial.println("\n[LTE] ========== SIM7600G INITIALIZATION ==========");
   Serial.print("[LTE] UART RX pin: GPIO");

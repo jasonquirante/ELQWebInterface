@@ -830,8 +830,10 @@ void handleRoot() {
     server.sendHeader("Expires", "-1");
     server.sendHeader("X-Captive-Portal", "true");
     server.sendHeader("Captive-Portal", "true");
+    sendPortalLandingPage();
+    return;
   }
-  
+
   if (serveFromSd("/")) {
     return;
   }
@@ -840,14 +842,14 @@ void handleRoot() {
 }
 
 void handleNotFound() {
-  if (serveFromSd(server.uri())) {
+  if (shouldUseCaptivePortal()) {
+    // Captive mode should always win over the SD-hosted app shell so OS
+    // probes and manual browser visits land on the portal consistently.
+    sendPortalLandingPage();
     return;
   }
 
-  if (shouldUseCaptivePortal()) {
-    // Captive portal: serve landing content directly to improve auto-open
-    // behavior on clients that do not follow redirects during probes.
-    sendPortalLandingPage();
+  if (serveFromSd(server.uri())) {
     return;
   }
 
@@ -886,15 +888,47 @@ void handleCaptiveProbe() {
 }  // namespace
 
 void webInit() {
+  WiFi.persistent(false);
   WiFi.mode(WIFI_AP);
   WiFi.setSleep(false);
-  WiFi.softAPConfig(AP_IP, AP_GATEWAY, AP_NETMASK);
-  WiFi.softAP(AP_SSID);
+
+  bool apStarted = false;
+  bool apConfigOk = false;
+  constexpr uint8_t AP_CHANNEL = 1;
+  constexpr uint8_t AP_MAX_CONN = 4;
+
+  for (int attempt = 1; attempt <= 3 && !apStarted; ++attempt) {
+    apConfigOk = WiFi.softAPConfig(AP_IP, AP_GATEWAY, AP_NETMASK);
+    apStarted = WiFi.softAP(AP_SSID, nullptr, AP_CHANNEL, false, AP_MAX_CONN);
+
+    if (!apConfigOk || !apStarted) {
+      Serial.print("[WEB] AP start attempt ");
+      Serial.print(attempt);
+      Serial.println(" failed. Retrying...");
+      WiFi.mode(WIFI_OFF);
+      delay(200);
+      WiFi.mode(WIFI_AP);
+      WiFi.setSleep(false);
+      delay(200);
+    }
+  }
 
   Serial.print("[WEB] AP SSID: ");
   Serial.println(AP_SSID);
+  Serial.print("[WEB] AP config result: ");
+  Serial.println(apConfigOk ? "OK" : "FAILED");
+  Serial.print("[WEB] AP start result: ");
+  Serial.println(apStarted ? "OK" : "FAILED");
+  Serial.print("[WEB] AP channel: ");
+  Serial.println(WiFi.channel());
+  Serial.print("[WEB] AP MAC: ");
+  Serial.println(WiFi.softAPmacAddress());
   Serial.print("[WEB] AP IP: ");
   Serial.println(WiFi.softAPIP());
+
+  if (!apStarted) {
+    Serial.println("[WEB] ERROR: Access point did not start. Wi-Fi will not be visible.");
+  }
 
   server.on("/gps", HTTP_GET, handleGps);
   server.on("/gps/diag", HTTP_GET, handleGpsDiag);

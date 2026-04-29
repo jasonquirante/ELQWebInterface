@@ -19,9 +19,14 @@ size_t serialBytesRemaining = 0;
 String serialLineBuffer;
 bool atBridgeMode = false;
 String atBridgeLineBuffer;
+bool rawBridgeMode = false;
 bool txPatternMode = false;
+bool hexDumpMode = false;
 unsigned long lastTxPatternMs = 0;
 bool setupComplete = false;
+bool lteBridgeInitDone = false;
+bool sdInitDone = false;
+bool gpsInitDone = false;
 bool lteInitStarted = false;
 unsigned long lteInitEarliestMs = 0;
 
@@ -120,6 +125,7 @@ bool isBootReady() {
 
 void startAtBridgeMode() {
   txPatternMode = false;
+  rawBridgeMode = false;
   atBridgeMode = true;
   atBridgeLineBuffer = "";
   Serial.println("[ATBRIDGE] Ready. Type AT commands and press Enter.");
@@ -132,6 +138,20 @@ void stopAtBridgeMode() {
   Serial.println("[ATBRIDGE] Exited bridge mode.");
 }
 
+void startRawBridgeMode() {
+  txPatternMode = false;
+  atBridgeMode = false;
+  rawBridgeMode = true;
+  atBridgeLineBuffer = "";
+  Serial.println("[RAWBRIDGE] Ready. Type raw bytes and press Enter to forward them.");
+  Serial.println("[RAWBRIDGE] Type EXIT to leave raw bridge mode.");
+}
+
+void stopRawBridgeMode() {
+  rawBridgeMode = false;
+  Serial.println("[RAWBRIDGE] Exited raw bridge mode.");
+}
+
 void setTxPatternMode(bool enabled) {
   txPatternMode = enabled;
   lastTxPatternMs = 0;
@@ -142,6 +162,16 @@ void setTxPatternMode(bool enabled) {
     Serial.println("[TXPATTERN] Use TXPATTERN OFF to stop.");
   } else {
     Serial.println("[TXPATTERN] OFF.");
+  }
+}
+
+void setHexDumpMode(bool enabled) {
+  hexDumpMode = enabled;
+  if (enabled) {
+    Serial.println("[HEXDUMP] ON. Printing every received LTE UART byte in hex.");
+    Serial.println("[HEXDUMP] Use HEXDUMP OFF to stop.");
+  } else {
+    Serial.println("[HEXDUMP] OFF.");
   }
 }
 
@@ -162,6 +192,26 @@ void handleAtBridgeLine(const String& line) {
   const size_t written = lteRawWrite(reinterpret_cast<const uint8_t*>(command.c_str()), command.length());
   if (written != command.length()) {
     Serial.println("[ATBRIDGE] !! Failed to send full command");
+  }
+}
+
+void handleRawBridgeLine(const String& line) {
+  if (line == "EXIT" || line == "ATEXIT") {
+    stopRawBridgeMode();
+    return;
+  }
+
+  if (line.length() == 0) {
+    return;
+  }
+
+  Serial.print("[RAWBRIDGE] >> ");
+  Serial.println(line);
+
+  const String command = line + "\r\n";
+  const size_t written = lteRawWrite(reinterpret_cast<const uint8_t*>(command.c_str()), command.length());
+  if (written != command.length()) {
+    Serial.println("[RAWBRIDGE] !! Failed to send full payload");
   }
 }
 
@@ -221,6 +271,15 @@ void handleSerialUploadLine(const String& line) {
     return;
   }
 
+  if (line == "RAWBRIDGE") {
+    if (!isBootReady()) {
+      Serial.println("BUSY setup not complete");
+      return;
+    }
+    startRawBridgeMode();
+    return;
+  }
+
   if (line == "TXPATTERN ON") {
     setTxPatternMode(true);
     return;
@@ -228,6 +287,16 @@ void handleSerialUploadLine(const String& line) {
 
   if (line == "TXPATTERN OFF") {
     setTxPatternMode(false);
+    return;
+  }
+
+  if (line == "HEXDUMP ON") {
+    setHexDumpMode(true);
+    return;
+  }
+
+  if (line == "HEXDUMP OFF") {
+    setHexDumpMode(false);
     return;
   }
 
@@ -373,7 +442,14 @@ void processSerialUpload() {
     while (lteRawAvailable() > 0) {
       const int modemByte = lteRawRead();
       if (modemByte >= 0) {
-        Serial.write(static_cast<uint8_t>(modemByte));
+        if (hexDumpMode) {
+          if (modemByte < 16) Serial.print("0x0");
+          else Serial.print("0x");
+          Serial.print(static_cast<uint8_t>(modemByte), HEX);
+          Serial.print(" ");
+        } else {
+          Serial.write(static_cast<uint8_t>(modemByte));
+        }
       }
     }
 
@@ -385,6 +461,44 @@ void processSerialUpload() {
       if (c == '\n') {
         if (atBridgeLineBuffer.length() > 0) {
           handleAtBridgeLine(atBridgeLineBuffer);
+          atBridgeLineBuffer = "";
+        }
+        continue;
+      }
+
+      atBridgeLineBuffer += c;
+      if (atBridgeLineBuffer.length() > 160) {
+        atBridgeLineBuffer = "";
+      }
+    }
+
+    delay(5);
+    return;
+  }
+
+  if (rawBridgeMode) {
+    while (lteRawAvailable() > 0) {
+      const int modemByte = lteRawRead();
+      if (modemByte >= 0) {
+        if (hexDumpMode) {
+          if (modemByte < 16) Serial.print("0x0");
+          else Serial.print("0x");
+          Serial.print(static_cast<uint8_t>(modemByte), HEX);
+          Serial.print(" ");
+        } else {
+          Serial.write(static_cast<uint8_t>(modemByte));
+        }
+      }
+    }
+
+    while (Serial.available() > 0) {
+      const char c = static_cast<char>(Serial.read());
+      if (c == '\r') {
+        continue;
+      }
+      if (c == '\n') {
+        if (atBridgeLineBuffer.length() > 0) {
+          handleRawBridgeLine(atBridgeLineBuffer);
           atBridgeLineBuffer = "";
         }
         continue;
@@ -522,21 +636,44 @@ void setup() {
   Serial.println("[SETUP] Starting Wi-Fi AP before modem and storage init...");
   webInit();
   setupComplete = true;
-  Serial.println("[SETUP] Wi-Fi AP is live. Continuing background initialization.");
+  Serial.println("[SETUP] Wi-Fi AP is live. Continuing background initialization in loop.");
+  Serial.println("[SETUP] Raw modem bridge will be enabled in the background.");
 
-  Serial.println("[SETUP] Initializing SD card...");
-  sdCardAvailable = initializeSdCard();
-  Serial.println(sdCardAvailable ? "[SETUP] SD card ready." : "[SETUP] SD card unavailable; captive portal only.");
-
-  // Defer LTE init to loop so serial upload mode can start promptly.
+  // Defer non-network initialization so captive portal responses are available immediately.
   lteInitEarliestMs = millis() + 30000;
   Serial.println("[SETUP] LTE init deferred to main loop.");
   Serial.println("[SETUP] LTE init grace period: 30s for serial commands/upload mode.");
-  gpsInit();
   Serial.println("[SETUP] System ready.");
 }
 
+void runDeferredBootTasks() {
+  if (!lteBridgeInitDone) {
+    lteBridgeInitDone = true;
+    lteInitBridge();
+    Serial.println("[SETUP] Raw modem bridge is available via the RAWBRIDGE serial command.");
+    return;
+  }
+
+  if (!sdInitDone) {
+    sdInitDone = true;
+    Serial.println("[SETUP] Initializing SD card...");
+    sdCardAvailable = initializeSdCard();
+    Serial.println(sdCardAvailable ? "[SETUP] SD card ready." : "[SETUP] SD card unavailable; captive portal only.");
+    return;
+  }
+
+  if (!gpsInitDone) {
+    gpsInitDone = true;
+    gpsInit();
+    return;
+  }
+}
+
 void loop() {
+  if (setupComplete) {
+    runDeferredBootTasks();
+  }
+
   processSerialUpload();
   if (serialUploadMode) {
     delay(1);
@@ -556,6 +693,11 @@ void loop() {
 
   if (atBridgeMode) {
     // Keep UART dedicated to bridge traffic; background tasks can contend for AT channel.
+    delay(5);
+    return;
+  }
+
+  if (rawBridgeMode) {
     delay(5);
     return;
   }

@@ -17,6 +17,7 @@ struct LteData {
 };
 
 void lteInit();
+void lteInitBridge();
 void lteLoop();
 bool lteIsResponsive();
 bool lteRecoverNow();
