@@ -721,12 +721,4 @@ void loop() {
   delay(100);
 }
 
-extern "C" void app_main() {
-  initArduino();
-  setup();
-  while (true) {
-    loop();
-    delay(1);
-  }
-}
 
