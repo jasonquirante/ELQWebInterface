@@ -455,7 +455,9 @@ bool tryDialCommands() {
   for (const char* cmd : connectCommands) {
     Serial.print("[LTE] Attempting dial: ");
     Serial.println(cmd);
-    lteSerial.DiscardInBuffer();
+    while (lteSerial.available()) {
+      lteSerial.read();
+    }
     lteSerial.print(cmd);
     lteSerial.print("\r\n");
 
@@ -1143,7 +1145,9 @@ bool lteSendSms(const String& phoneNumber, const String& message, String& modemR
   const String cmgs = String("AT+CMGS=\"") + phoneNumber + "\"";
   Serial.print("[LTE] [SMS] TX: ");
   Serial.println(cmgs);
-  lteSerial.DiscardInBuffer();
+  while (lteSerial.available()) {
+    lteSerial.read();
+  }
   lteSerial.print(cmgs);
   lteSerial.print("\r");
 
