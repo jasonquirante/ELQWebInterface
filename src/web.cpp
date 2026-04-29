@@ -28,6 +28,38 @@ bool isInternetReady() {
   return lte.dataConnected && lte.ipAddress.length() > 0 && lte.ipAddress != "0.0.0.0";
 }
 
+bool isModemAlive() {
+  return lteIsResponsive();
+}
+
+bool isNetworkRegistered(const LteData& lte) {
+  const bool csRegistered = (lte.creg == 1 || lte.creg == 5);
+  const bool psRegistered = (lte.cereg == 1 || lte.cereg == 5);
+  return csRegistered || psRegistered;
+}
+
+String signalQualityFromCsq(int csq) {
+  if (csq < 0) {
+    return "Unknown";
+  }
+  if (csq == 99) {
+    return "Unknown / not ready";
+  }
+  if (csq >= 31) {
+    return "Excellent";
+  }
+  if (csq >= 20) {
+    return "Good";
+  }
+  if (csq >= 10) {
+    return "Fair";
+  }
+  if (csq >= 1) {
+    return "Weak";
+  }
+  return "No signal";
+}
+
 bool shouldUseCaptivePortal() {
   return FORCE_CAPTIVE_PORTAL || !isInternetReady();
 }
@@ -508,7 +540,9 @@ void handleGpsDiag() {
   payload += "}";
   payload += ",\"modem\":{";
   payload += "\"responsive\":" + String(lte.responsive ? "true" : "false");
+  payload += ",\"modemAlive\":" + String(isModemAlive() ? "true" : "false");
   payload += ",\"simReady\":" + String(lte.simReady ? "true" : "false");
+  payload += ",\"networkRegistered\":" + String(isNetworkRegistered(lte) ? "true" : "false");
   payload += ",\"creg\":" + String(lte.creg);
   payload += ",\"cereg\":" + String(lte.cereg);
   payload += ",\"cgatt\":" + String(lte.cgatt);
@@ -530,10 +564,13 @@ void handleGpsDiag() {
 
 void handleNetInfo() {
   const LteData lte = lteGetData();
+  const bool networkRegistered = isNetworkRegistered(lte);
 
   String payload = "{";
   payload += "\"responsive\":" + String(lte.responsive ? "true" : "false");
+  payload += ",\"modemAlive\":" + String(isModemAlive() ? "true" : "false");
   payload += ",\"simReady\":" + String(lte.simReady ? "true" : "false");
+  payload += ",\"networkRegistered\":" + String(networkRegistered ? "true" : "false");
   payload += ",\"dataConnected\":" + String(lte.dataConnected ? "true" : "false");
   payload += ",\"rssi\":" + String(lte.rssi);
   payload += ",\"ber\":" + String(lte.ber);
@@ -542,6 +579,17 @@ void handleNetInfo() {
   payload += ",\"cgatt\":" + String(lte.cgatt);
   payload += ",\"apn\":\"" + jsonEscape(lte.apn) + "\"";
   payload += ",\"ipAddress\":\"" + jsonEscape(lte.ipAddress) + "\"";
+  if (!lte.responsive) {
+    payload += ",\"networkState\":\"Modem offline\"";
+  } else if (!lte.simReady) {
+    payload += ",\"networkState\":\"SIM not ready\"";
+  } else if (!networkRegistered) {
+    payload += ",\"networkState\":\"Waiting for network registration\"";
+  } else if (!lte.dataConnected) {
+    payload += ",\"networkState\":\"Registered, waiting for data session\"";
+  } else {
+    payload += ",\"networkState\":\"Internet up\"";
+  }
   payload += ",\"downloadMbps\":-1";
   payload += ",\"uploadMbps\":-1";
   payload += ",\"note\":\"Speed test not yet implemented on modem side\"";
@@ -578,13 +626,16 @@ void handlePortalStatus() {
 void handleModemHealth() {
   const LteData lte = lteGetData();
   const unsigned long uptime = millis();
+  const bool networkRegistered = isNetworkRegistered(lte);
 
   String payload = "{";
   payload += "\"ok\":true";
   payload += ",\"timestamp\":" + String(millis());
   payload += ",\"uptime\":" + String(uptime / 1000);
   payload += ",\"responsive\":" + String(lte.responsive ? "true" : "false");
+  payload += ",\"modemAlive\":" + String(isModemAlive() ? "true" : "false");
   payload += ",\"simReady\":" + String(lte.simReady ? "true" : "false");
+  payload += ",\"networkRegistered\":" + String(networkRegistered ? "true" : "false");
   payload += ",\"dataConnected\":" + String(lte.dataConnected ? "true" : "false");
   payload += ",\"rssi\":" + String(lte.rssi);
   payload += ",\"csq\":" + String(lte.rssi);
@@ -594,13 +645,18 @@ void handleModemHealth() {
   payload += ",\"cgatt\":" + String(lte.cgatt);
   payload += ",\"apn\":\"" + jsonEscape(lte.apn) + "\"";
   payload += ",\"ipAddress\":\"" + jsonEscape(lte.ipAddress) + "\"";
-  payload += ",\"signalQuality\":\"";
-  if (lte.rssi >= -85) payload += "Excellent";
-  else if (lte.rssi >= -95) payload += "Good";
-  else if (lte.rssi >= -105) payload += "Fair";
-  else if (lte.rssi >= -115) payload += "Weak";
-  else payload += "No signal";
-  payload += "\"";
+  payload += ",\"signalQuality\":\"" + signalQualityFromCsq(lte.rssi) + "\"";
+  if (!lte.responsive) {
+    payload += ",\"networkState\":\"Modem offline\"";
+  } else if (!lte.simReady) {
+    payload += ",\"networkState\":\"SIM not ready\"";
+  } else if (!networkRegistered) {
+    payload += ",\"networkState\":\"Waiting for network registration\"";
+  } else if (!lte.dataConnected) {
+    payload += ",\"networkState\":\"Registered, waiting for data session\"";
+  } else {
+    payload += ",\"networkState\":\"Internet up\"";
+  }
   payload += "}";
 
   server.send(200, "application/json", payload);

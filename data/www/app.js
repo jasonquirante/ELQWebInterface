@@ -37,6 +37,29 @@ function setNeutralStatus(id, text) {
   el.className = "status-pill neutral";
 }
 
+function formatSignalQuality(csq) {
+  const value = Number(csq);
+  if (!Number.isFinite(value) || value < 0) {
+    return "Unknown";
+  }
+  if (value === 99) {
+    return "Unknown / not ready";
+  }
+  if (value >= 31) {
+    return "Excellent";
+  }
+  if (value >= 20) {
+    return "Good";
+  }
+  if (value >= 10) {
+    return "Fair";
+  }
+  if (value >= 1) {
+    return "Weak";
+  }
+  return "No signal";
+}
+
 function setMapLink(latitude, longitude) {
   const mapLink = document.getElementById("gpsMap");
   if (!mapLink) {
@@ -277,8 +300,8 @@ async function refreshModemHealth() {
     const now = new Date();
     setText("diagLastUpdate", `Updated ${now.toLocaleTimeString()}`);
 
-    setText("diagSignalQuality", payload.signalQuality || "--");
-    setText("diagRssi", `RSSI: ${payload.rssi} dBm`);
+    setText("diagSignalQuality", payload.signalQuality || formatSignalQuality(payload.csq));
+    setText("diagRssi", `CSQ: ${payload.csq}`);
 
     const cregMap = { 0: "Not registered", 1: "Home", 2: "Searching", 5: "Roaming", "-1": "Unknown" };
     const cregStatus = cregMap[payload.creg] || `State ${payload.creg}`;
@@ -294,11 +317,15 @@ async function refreshModemHealth() {
     setText("diagCgatt", cgattStatus);
     setText("diagCgattNote", `CGATT: ${payload.cgatt}`);
 
-    const simStatus = payload.simReady ? "Ready" : "Not ready";
+    const simStatus = !payload.modemAlive
+      ? "Modem offline"
+      : payload.simReady
+        ? "Ready"
+        : "Not ready";
     setText("diagSimReady", simStatus);
-    setText("diagSimNote", payload.simReady ? "SIM detected" : "No SIM");
+    setText("diagSimNote", !payload.modemAlive ? "No AT response" : payload.simReady ? "SIM detected" : "No SIM / booting");
 
-    const dataStatus = payload.dataConnected ? "Connected" : "Not connected";
+    const dataStatus = payload.dataConnected ? "Connected" : payload.networkRegistered ? "Waiting for data session" : "Not connected";
     setText("diagDataConnected", dataStatus);
     const ipDisplay = payload.ipAddress && payload.ipAddress !== "0.0.0.0" ? payload.ipAddress : "--";
     setText("diagIpAddress", `IP: ${ipDisplay}`);
@@ -465,22 +492,25 @@ async function refreshGpsDiagnostics() {
 
 async function refreshNet() {
   const net = await fetchJson("/netinfo");
-  const lteText = net.dataConnected ? "Internet up" : "No data";
+  const lteText = net.networkState || (net.dataConnected ? "Internet up" : "No data");
   setStatus("lteStatus", net.dataConnected, lteText);
   setText("lteAboutStatus", lteText);
-  setText("rssi", `RSSI ${net.rssi}`);
+  setText("rssi", `CSQ ${net.csq ?? net.rssi}`);
 
   let simText = "SIM status unknown";
-  if (!net.responsive) {
+  if (!net.modemAlive) {
     simText = "SIM status unknown (modem offline)";
   } else if (net.simReady) {
     simText = "SIM ready";
   } else {
-    simText = "SIM not ready / missing";
+    simText = "SIM not ready / booting";
   }
   setText("simReady", simText);
 
-  setText("registered", `CREG ${net.creg} · CEREG ${net.cereg}`);
+  const registrationText = net.networkRegistered
+    ? `Registered · CREG ${net.creg} · CEREG ${net.cereg}`
+    : `Waiting for registration · CREG ${net.creg} · CEREG ${net.cereg}`;
+  setText("registered", registrationText);
 
   let attachText = "Attach unknown";
   if (net.cgatt === 1) {
@@ -491,7 +521,7 @@ async function refreshNet() {
   setText("attached", attachText);
 
   setText("speed", `${net.downloadMbps} / ${net.uploadMbps} Mbps`);
-  setText("internetState", net.dataConnected ? `APN ${net.apn} · IP ${net.ipAddress || "--"}` : `APN ${net.apn || "--"} · waiting for session`);
+  setText("internetState", net.dataConnected ? `APN ${net.apn} · IP ${net.ipAddress || "--"}` : `APN ${net.apn || "--"} · ${net.networkState || "waiting for session"}`);
 }
 
 async function refreshLogs() {
