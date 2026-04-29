@@ -631,7 +631,7 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
 
-  Serial.println("\n========== ELQDRONE STARTUP ==========\n");
+  Serial.println("\n========== RESQLinkDRONE STARTUP ==========\n");
 
   Serial.println("[SETUP] Starting Wi-Fi AP before modem and storage init...");
   webInit();
@@ -646,7 +646,7 @@ void setup() {
   Serial.println("[SETUP] System ready.");
 }
 
-void runDeferredBootTasks() {
+ void runDeferredBootTasks() {
   if (!lteBridgeInitDone) {
     lteBridgeInitDone = true;
     lteInitBridge();
@@ -658,7 +658,14 @@ void runDeferredBootTasks() {
     sdInitDone = true;
     Serial.println("[SETUP] Initializing SD card...");
     sdCardAvailable = initializeSdCard();
-    Serial.println(sdCardAvailable ? "[SETUP] SD card ready." : "[SETUP] SD card unavailable; captive portal only.");
+    if (sdCardAvailable) {
+      Serial.println("[SETUP] ✓ SD card ready. Web portal files can now be accessed from /www/");
+      Serial.println("[SETUP] If no files appear, run the upload script:");
+      Serial.println("[SETUP]   powershell -ExecutionPolicy Bypass -File tools/upload-www-over-serial.ps1");
+    } else {
+      Serial.println("[SETUP] ✗ SD card unavailable; captive portal will be served as fallback.");
+      Serial.println("[SETUP] Connect a formatted SD card and restart the device.");
+    }
     return;
   }
 

@@ -12,9 +12,9 @@
 extern bool sdCardAvailable;
 
 namespace {
-constexpr const char* AP_SSID = "ELQWifi";
+constexpr const char* AP_SSID = "RESQLinkDrone";
 constexpr uint8_t DNS_PORT = 53;
-constexpr bool FORCE_CAPTIVE_PORTAL = true;
+constexpr bool FORCE_CAPTIVE_PORTAL = false;
 const IPAddress AP_IP(192, 168, 4, 1);
 const IPAddress AP_GATEWAY(192, 168, 4, 1);
 const IPAddress AP_NETMASK(255, 255, 255, 0);
@@ -51,7 +51,7 @@ void sendPortalLandingPage() {
     "  window.location.replace('http://192.168.4.1/');\n"
     "}\n"
     "</script>\n"
-    "<title>ELQDrone Setup</title>\n"
+    "<title>RESQLinkDrone Setup</title>\n"
     "<style>\n"
     "body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; }\n"
     "#container { background: white; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); padding: 40px; max-width: 500px; width: 100%; }\n"
@@ -63,8 +63,8 @@ void sendPortalLandingPage() {
     "</head>\n"
     "<body>\n"
     "<div id='container'>\n"
-    "<h1>ELQWifi Network</h1>\n"
-    "<p>You are connected to the <strong>ELQWifi</strong> access point.</p>\n"
+    "<h1>RESQLinkDrone Network</h1>\n"
+    "<p>You are connected to the <strong>RESQLinkDrone</strong> access point.</p>\n"
     "<div class='status'>\n"
     "<strong>Network Status:</strong><br>\n"
     "Setting up internet gateway...\n"
@@ -203,7 +203,7 @@ String buildSmsTemplate(const String& senderName, const String& senderContact, c
 
   String composed;
   composed.reserve(200);
-  composed += "ELQDrone\n";
+  composed += "RESQLinkDrone\n";
 
   composed += "From:";
   composed += senderName.length() > 0 ? senderName : String("Unknown");
@@ -823,18 +823,23 @@ void handleSmsInbox() {
 }
 
 void handleRoot() {
-  if (shouldUseCaptivePortal()) {
-    // Only advertise captive mode while upstream internet is unavailable.
+  const bool captiveMode = shouldUseCaptivePortal();
+  if (captiveMode) {
+    // Keep captive headers on the root response so OS captive detection still
+    // recognizes this network while the SD-hosted app is being served.
     server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     server.sendHeader("Pragma", "no-cache");
     server.sendHeader("Expires", "-1");
     server.sendHeader("X-Captive-Portal", "true");
     server.sendHeader("Captive-Portal", "true");
-    sendPortalLandingPage();
-    return;
   }
 
   if (serveFromSd("/")) {
+    return;
+  }
+
+  if (captiveMode) {
+    sendPortalLandingPage();
     return;
   }
 
@@ -842,21 +847,84 @@ void handleRoot() {
 }
 
 void handleNotFound() {
-  if (shouldUseCaptivePortal()) {
-    // Captive mode should always win over the SD-hosted app shell so OS
-    // probes and manual browser visits land on the portal consistently.
-    sendPortalLandingPage();
-    return;
-  }
-
   if (serveFromSd(server.uri())) {
     return;
   }
 
-  server.send(404, "text/plain", "Not found");
+  if (shouldUseCaptivePortal()) {
+    // Captive mode should only handle requests that are not part of the SD app.
+    sendPortalLandingPage();
+    return;
+  }
+
+  // File not found - provide helpful diagnostic info
+  String errorHtml = String(
+    "<!DOCTYPE html>\n"
+    "<html>\n"
+    "<head>\n"
+    "<meta charset='utf-8'>\n"
+    "<meta name='viewport' content='width=device-width,initial-scale=1'>\n"
+    "<title>File Not Found</title>\n"
+    "<style>\n"
+    "body { font-family: monospace; margin: 20px; padding: 20px; background: #f5f5f5; }\n"
+    ".error { background: #ffe6e6; padding: 15px; border: 1px solid #cc0000; border-radius: 4px; }\n"
+    ".info { background: #e6f2ff; padding: 15px; margin-top: 15px; border: 1px solid #0066cc; border-radius: 4px; }\n"
+    "h1 { color: #cc0000; margin: 0 0 10px 0; }\n"
+    "p { margin: 5px 0; }\n"
+    "code { background: white; padding: 2px 5px; }\n"
+    "</style>\n"
+    "</head>\n"
+    "<body>\n"
+    "<div class='error'>\n"
+    "<h1>404 - File Not Found</h1>\n"
+    "<p><strong>Requested:</strong> <code>" + jsonEscape(server.uri()) + "</code></p>\n"
+    "</div>\n"
+    "<div class='info'>\n"
+    "<p><strong>Diagnostics:</strong></p>\n"
+    "<p>• SD Card Available: " + String(sdCardAvailable ? "✓ YES" : "✗ NO") + "</p>\n"
+  );
+
+  if (!sdCardAvailable) {
+    errorHtml += "<p><strong style='color: #cc0000;'>⚠ SD card not initialized!</strong></p>\n";
+    errorHtml += "<p>The web portal files have not been uploaded to the SD card yet.</p>\n";
+    errorHtml += "<p>To fix this:</p>\n";
+    errorHtml += "<ol>\n";
+    errorHtml += "<li>Connect via serial console (115200 baud)</li>\n";
+    errorHtml += "<li>Wait for boot to complete (~30 seconds)</li>\n";
+    errorHtml += "<li>Run: <code>powershell -ExecutionPolicy Bypass -File tools/upload-www-over-serial.ps1</code></li>\n";
+    errorHtml += "</ol>\n";
+  } else {
+    errorHtml += "<p>• Requested path exists on SD: ✗ NO</p>\n";
+    errorHtml += "<p>The file does not exist on the SD card.</p>\n";
+    errorHtml += "<p>Ensure web portal files are uploaded to <code>/www/</code></p>\n";
+  }
+
+  errorHtml += "</div>\n"
+    "</body>\n"
+    "</html>\n";
+
+  server.send(404, "text/html; charset=utf-8", errorHtml);
 }
 
 void handleCaptiveProbe() {
+  // If SD-hosted app is available, prefer serving it so client captive
+  // assistants show the real portal UI instead of the setup landing page.
+  if (sdCardAvailable) {
+    // Try serving the exact requested probe path first (some clients request
+    // well-known probe URLs under root). If that fails, fall back to the
+    // SD-hosted root index.
+    if (serveFromSd(server.uri())) {
+      Serial.print("[WEB] Captive probe served SD path: ");
+      Serial.println(server.uri());
+      return;
+    }
+
+    if (serveFromSd("/")) {
+      Serial.println("[WEB] Captive probe served SD index for client.");
+      return;
+    }
+  }
+
   if (shouldUseCaptivePortal()) {
     // Return landing content while captive mode is active so OS probe checks
     // detect a login page and launch their captive portal assistant.

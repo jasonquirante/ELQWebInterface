@@ -139,7 +139,7 @@ let latestGpsForSms = {
 };
 
 function buildSmsPreview(senderName, senderContact, messageBody, gps) {
-  let composed = "ELQDrone\n";
+  let composed = "RESQLinkDrone\n";
   composed += "From:";
   composed += senderName.length > 0 ? senderName : "Unknown";
   if (senderContact.length > 0) {
@@ -487,7 +487,7 @@ async function refreshLogs() {
 
 async function tick() {
   try {
-    const wifiText = "Connected to ELQDrone";
+    const wifiText = "Connected to RESQLinkDrone";
     setNeutralStatus("wifiStatus", wifiText);
     setText("wifiStatusTop", "Online");
     setText("wifiStatusAbout", "Online");
