@@ -36,8 +36,6 @@ constexpr int LTE_PDP_AUTH_PAP = 1;
 constexpr uint32_t LTE_PPP_CONNECT_TIMEOUT_MS = 25000;
 constexpr uint32_t LTE_PPP_TX_WRITE_TIMEOUT_MS = 250;
 constexpr const char* WIFI_AP_IFKEY = "WIFI_AP_DEF";
-constexpr uint32_t LTE_CPIN_CHECK_MS = 10000;
-unsigned long lastCpinMs = 0;
 
 HardwareSerial lteSerial(2);
 bool modemResponsive = false;
@@ -453,45 +451,13 @@ bool tryDialCommands() {
   };
 
   for (const char* cmd : connectCommands) {
-    Serial.print("[LTE] Attempting dial: ");
-    Serial.println(cmd);
-    while (lteSerial.available()) {
-      lteSerial.read();
+    if (sendCommandExpectToken(cmd, "CONNECT", response, LTE_PPP_CONNECT_TIMEOUT_MS)) {
+      Serial.print("[LTE] PPP data mode entered with ");
+      Serial.println(cmd);
+      return true;
     }
-    lteSerial.print(cmd);
-    lteSerial.print("\r\n");
-
-    const unsigned long startMs = millis();
-    response = "";
-    bool foundConnect = false;
-
-    while (millis() - startMs < LTE_PPP_CONNECT_TIMEOUT_MS) {
-      while (lteSerial.available()) {
-        response += static_cast<char>(lteSerial.read());
-        if (response.indexOf("CONNECT") != -1) {
-          foundConnect = true;
-          break;
-        }
-      }
-
-      if (foundConnect) {
-        Serial.print("[LTE] PPP data mode entered with ");
-        Serial.println(cmd);
-        return true;
-      }
-
-      if (response.indexOf("ERROR") != -1 || response.indexOf("NO CARRIER") != -1) {
-        break;
-      }
-
-      webLoop();
-      delay(50);
-    }
-
     Serial.print("[LTE] PPP dial failed for ");
-    Serial.print(cmd);
-    Serial.print(". Response: ");
-    Serial.println(response.length() > 0 ? response : "(no response)");
+    Serial.println(cmd);
   }
 
   return false;
@@ -659,21 +625,12 @@ bool enterPppDataMode() {
 
   for (size_t i = 0; i < apnCount; ++i) {
     apn = apnCandidates[i];
-    Serial.print("[LTE] Attempting APN: ");
+    Serial.print("[LTE] Setting APN: ");
     Serial.println(apn);
 
-    // Query current APN context before attempting to set
-    if (!lteSendCommand("AT+CGDCONT?", response, 2000)) {
-      Serial.println("[LTE] Failed to query APN context; continuing...");
-    } else if (response.indexOf(apn) != -1) {
-      Serial.println("[LTE] APN already configured on modem; skipping set.");
-    } else {
-      Serial.print("[LTE] Setting APN to: ");
-      Serial.println(apn);
-      if (!lteSendCommand((String("AT+CGDCONT=1,\"IP\",\"") + apn + "\"").c_str(), response, 4000)) {
-        Serial.println("[LTE] Failed to set APN context.");
-        continue;
-      }
+    if (!lteSendCommand((String("AT+CGDCONT=1,\"IP\",\"") + apn + "\"").c_str(), response, 4000)) {
+      Serial.println("[LTE] Failed to set APN context.");
+      continue;
     }
 
     if (useAuth) {
@@ -716,17 +673,6 @@ bool startInternetGateway() {
   if (!modemResponsive) {
     Serial.println("[LTE] Modem is not responsive; skipping internet gateway start.");
     return false;
-  }
-
-  // Ensure SIM is present and ready before attempting to start PPP
-  if (!currentLteData.simReady) {
-    String cpinResp;
-    (void)lteSendCommand("AT+CPIN?", cpinResp, 1500);
-    updateStatusFromResponse("AT+CPIN?", cpinResp);
-    if (!currentLteData.simReady) {
-      Serial.println("[LTE] SIM not ready; skipping internet gateway start.");
-      return false;
-    }
   }
 
   if (!ensurePppNetif()) {
@@ -1119,23 +1065,14 @@ bool lteSendSms(const String& phoneNumber, const String& message, String& modemR
   }
 
   String response;
-  // Set SMS text mode
   if (!lteSendCommand("AT+CMGF=1", response, 2000)) {
     modemResponse = response;
     return false;
   }
 
-  // Set character set to GSM
   if (!lteSendCommand("AT+CSCS=\"GSM\"", response, 2000)) {
     modemResponse = response;
     return false;
-  }
-
-  // Set SMS storage to SM (SIM) and enable storage
-  if (!lteSendCommand("AT+CPMS=\"SM\",\"SM\",\"SR\"", response, 2500)) {
-    Serial.println("[LTE] Warning: failed to set SMS storage (AT+CPMS); will attempt device storage");
-    // Try device storage as fallback
-    (void)lteSendCommand("AT+CPMS=\"ME\",\"ME\",\"SR\"", response, 2500);
   }
 
   while (lteSerial.available()) {
@@ -1145,9 +1082,6 @@ bool lteSendSms(const String& phoneNumber, const String& message, String& modemR
   const String cmgs = String("AT+CMGS=\"") + phoneNumber + "\"";
   Serial.print("[LTE] [SMS] TX: ");
   Serial.println(cmgs);
-  while (lteSerial.available()) {
-    lteSerial.read();
-  }
   lteSerial.print(cmgs);
   lteSerial.print("\r");
 
@@ -1169,8 +1103,6 @@ bool lteSendSms(const String& phoneNumber, const String& message, String& modemR
   }
 
   if (promptResp.indexOf('>') == -1) {
-    Serial.print("[LTE] [SMS] Prompt not received; response was: ");
-    Serial.println(promptResp.length() > 0 ? promptResp : "(empty)");
     modemResponse = promptResp;
     return false;
   }
@@ -1348,17 +1280,6 @@ void lteLoop() {
   }
 
   if (modemResponsive) {
-    const unsigned long now2 = millis();
-    if (now2 - lastCpinMs >= LTE_CPIN_CHECK_MS) {
-      lastCpinMs = now2;
-      String cpinResp;
-      if (lteSendCommand("AT+CPIN?", cpinResp, 1200)) {
-        updateStatusFromResponse("AT+CPIN?", cpinResp);
-        Serial.print("[LTE] SIM status: ");
-        Serial.println(currentLteData.simReady ? "READY" : cpinResp);
-      }
-    }
-
     (void)startInternetGateway();
   }
 

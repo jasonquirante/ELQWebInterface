@@ -154,8 +154,7 @@
 		"C:/Users/espad/Documents/GitHub/ELQWebInterface/build/esp-idf/perfmon/cmake_install.cmake",
 		"C:/Users/espad/Documents/GitHub/ELQWebInterface/build/esp-idf/rt/cmake_install.cmake",
 		"C:/Users/espad/Documents/GitHub/ELQWebInterface/build/esp-idf/spiffs/cmake_install.cmake",
-		"C:/Users/espad/Documents/GitHub/ELQWebInterface/build/esp-idf/ulp/cmake_install.cmake",
-		"C:/Users/espad/Documents/GitHub/ELQWebInterface/build/esp-idf/src/cmake_install.cmake"
+		"C:/Users/espad/Documents/GitHub/ELQWebInterface/build/esp-idf/ulp/cmake_install.cmake"
 	],
 	"Parallel" : false
 }

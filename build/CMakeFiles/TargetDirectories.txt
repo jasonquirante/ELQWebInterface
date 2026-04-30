@@ -1074,10 +1074,3 @@ C:/Users/espad/Documents/GitHub/ELQWebInterface/build/esp-idf/ulp/CMakeFiles/lis
 C:/Users/espad/Documents/GitHub/ELQWebInterface/build/esp-idf/ulp/CMakeFiles/install.dir
 C:/Users/espad/Documents/GitHub/ELQWebInterface/build/esp-idf/ulp/CMakeFiles/install/local.dir
 C:/Users/espad/Documents/GitHub/ELQWebInterface/build/esp-idf/ulp/CMakeFiles/install/strip.dir
-C:/Users/espad/Documents/GitHub/ELQWebInterface/build/esp-idf/src/CMakeFiles/__idf_src.dir
-C:/Users/espad/Documents/GitHub/ELQWebInterface/build/esp-idf/src/CMakeFiles/edit_cache.dir
-C:/Users/espad/Documents/GitHub/ELQWebInterface/build/esp-idf/src/CMakeFiles/rebuild_cache.dir
-C:/Users/espad/Documents/GitHub/ELQWebInterface/build/esp-idf/src/CMakeFiles/list_install_components.dir
-C:/Users/espad/Documents/GitHub/ELQWebInterface/build/esp-idf/src/CMakeFiles/install.dir
-C:/Users/espad/Documents/GitHub/ELQWebInterface/build/esp-idf/src/CMakeFiles/install/local.dir
-C:/Users/espad/Documents/GitHub/ELQWebInterface/build/esp-idf/src/CMakeFiles/install/strip.dir

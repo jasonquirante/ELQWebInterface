@@ -1,0 +1,16 @@
+Command: cmake -G Ninja -B C:\Users\espad\Documents\GitHub\ELQWebInterface\build -DPYTHON_DEPS_CHECKED=1 -DPYTHON=C:\Espressif\tools\python\v6.0\venv\Scripts\python.exe -DESP_PLATFORM=1 -DIDF_TARGET=esp32 -DCCACHE_ENABLE=False C:\Users\espad\Documents\GitHub\ELQWebInterface
+Configuration Report                                                           
++-----------------------------------------------------------------------------+
+|  Parser Version: 1                                                          |
+|  Verbosity: default                                                         |
+|  Defaults policy: sdkconfig                                                 |
+|  Status: Finished with notifications                                        |
+|                                                                             |
+| Disabled Symbols/Choices With User-Set Value                                |
+| +-------------------------------------------------------------------------+ |
+| | * ESPTOOLPY_FLASHSIZE (defined at                                       | |
+| | C:/esp/v6.0/esp-idf/components/esptool_py/Kconfig.projbuild:136) with   | |
+| | user-set value 2MB from                                                 | |
+| | C:\Users\espad\AppData\Local\Temp\kconfgen_tmpn7p373ah                  | |
+| +-------------------------------------------------------------------------+ |
++-----------------------------------------------------------------------------+
