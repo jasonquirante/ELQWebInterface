@@ -1,0 +1,150 @@
+Command: C:\Espressif\tools\python\v6.0\venv\Scripts\python.exe C:\esp\v6.0\esp-idf\tools/idf_monitor.py -p COM3 -b 115200 --toolchain-prefix xtensa-esp32-elf- --target esp32 --revision 0 C:\Users\espad\Documents\GitHub\ELQWebInterface\build\bootloader\bootloader.elf --force-color -m 'C:\Espressif\tools\python\v6.0\venv\Scripts\python.exe' 'C:\esp\v6.0\esp-idf\tools\idf.py'
+0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:2
+load:0x3fff0030,len:6652
+ho 0 tail 12 room 4
+load:0x40078000,len:15052
+load:0x40080400,len:3836
+entry 0x4008069c
+[0;32mI (29) boot: ESP-IDF 4.4.7 2nd stage bootloader[0m
+[0;32mI (29) boot: compile time 22:19:42[0m
+[0;32mI (29) boot: Multicore bootloader[0m
+[0;32mI (32) boot: chip revision: v3.1[0m
+[0;32mI (36) boot.esp32: SPI Speed      : 40MHz[0m
+[0;32mI (41) boot.esp32: SPI Mode       : DIO[0m
+[0;32mI (45) boot.esp32: SPI Flash Size : 4MB[0m
+[0;32mI (50) boot: Enabling RNG early entropy source...[0m
+[0;32mI (55) boot: Partition Table:[0m
+[0;32mI (59) boot: ## Label            Usage          Type ST Offset   Length[0m
+[0;32mI (66) boot:  0 nvs              WiFi data        01 02 00009000 00006000[0m
+[0;32mI (74) boot:  1 phy_init         RF data          01 01 0000f000 00001000[0m
+[0;32mI (81) boot:  2 factory          factory app      00 00 00010000 00100000[0m
+[0;32mI (89) boot: End of partition table[0m
+[0;32mI (93) esp_image: segment 0: paddr=00010020 vaddr=3f400020 size=22e40h (142912) map[0m
+[0;32mI (153) esp_image: segment 1: paddr=00032e68 vaddr=3ffb0000 size=0365ch ( 13916) load[0m
+[0;32mI (159) esp_image: segment 2: paddr=000364cc vaddr=40080000 size=09b4ch ( 39756) load[0m
+[0;32mI (175) esp_image: segment 3: paddr=00040020 vaddr=400d0020 size=a8040h (688192) map[0m
+[0;32mI (424) esp_image: segment 4: paddr=000e8068 vaddr=40089b4c size=0c4a0h ( 50336) load[0m
+[0;32mI (456) boot: Loaded app from partition at offset 0x10000[0m
+[0;32mI (456) boot: Disabling RNG early entropy source...[0m
+[0;32mI (468) cpu_start: Multicore app[0m
+[0;32mI (468) cpu_start: Pro cpu up.[0m
+[0;32mI (468) cpu_start: Starting app cpu, entry point is 0x40081988[0m
+[0;32mI (0) cpu_start: App cpu up.[0m
+[0;32mI (486) cpu_start: Pro cpu start user code[0m
+[0;32mI (486) cpu_start: cpu freq: 160000000[0m
+[0;32mI (486) cpu_start: Application information:[0m
+[0;32mI (490) cpu_start: Project name:     RESQLinkDrone[0m
+[0;32mI (496) cpu_start: App version:      1.0[0m
+[0;32mI (501) cpu_start: Compile time:     Apr 29 2026 22:14:50[0m
+[0;32mI (507) cpu_start: ELF file SHA256:  b8f8f68c06879dc9...[0m
+[0;32mI (513) cpu_start: ESP-IDF:          4.4.7[0m
+[0;32mI (517) cpu_start: Min chip rev:     v0.0[0m
+[0;32mI (522) cpu_start: Max chip rev:     v3.99 [0m
+[0;32mI (527) cpu_start: Chip rev:         v3.1[0m
+[0;32mI (532) heap_init: Initializing. RAM available for dynamic allocation:[0m
+[0;32mI (539) heap_init: At 3FFAE6E0 len 00001920 (6 KiB): DRAM[0m
+[0;32mI (545) heap_init: At 3FFB8050 len 00027FB0 (159 KiB): DRAM[0m
+[0;32mI (551) heap_init: At 3FFE0440 len 00003AE0 (14 KiB): D/IRAM[0m
+[0;32mI (557) heap_init: At 3FFE4350 len 0001BCB0 (111 KiB): D/IRAM[0m
+[0;32mI (564) heap_init: At 40095FEC len 0000A014 (40 KiB): IRAM[0m
+[0;32mI (572) spi_flash: detected chip: generic[0m
+[0;32mI (575) spi_flash: flash io: dio[0m
+[0;32mI (581) cpu_start: Starting scheduler on PRO CPU.[0m
+[0;32mI (0) cpu_start: Starting scheduler on APP CPU.[0m
+[0;32mI (2
+========== RESQLinkDRONE STARTUP ==========
+
+[SETUP] Starting Wi-Fi AP before modem and storage init...
+[0;32mI (1032) wifi:wifi driver task: 3ffc53dc, prio:23, stack:6656, core=0[0m
+[0;32mI (2656) wifi:wifi firmware version: 1fd20f4[0m
+[0;32mI (2656) wifi:wifi certification version: v7.0[0m
+[0;32mI (2659) wifi:config NVS flash: enabled[0m
+[0;32mI (2663) wifi:config nano formating: disabled[0m
+[0;32mI (2667) wifi:Init data frame dynamic rx buffer num: 32[0m
+[0;32mI (2672) wifi:Init static rx mgmt buffer num: 5[0m
+[0;32mI (2676) wifi:Init management short buffer num: 32[0m
+[0;32mI (2681) wifi:Init dynamic tx buffer num: 32[0m
+[0;32mI (2685) wifi:Init static rx buffer size: 1600[0m
+[0;32mI (2689) wifi:Init static rx buffer num: 4[0m
+[0;32mI (2692) wifi:Init dynamic rx buffer num: 32[0m
+[0;32mI (2697) wifi_init: rx ba win: 6[0m
+[0;32mI (2700) wifi_init: tcpip mbox: 32[0m
+[0;32mI (2704) wifi_init: udp mbox: 6[0m
+[0;32mI (2708) wifi_init: tcp mbox: 6[0m
+[0;32mI (2712) wifi_init: tcp tx win: 5760[0m
+[0;32mI (2716) wifi_init: tcp rx win: 5760[0m
+[0;32mI (2721) wifi_init: tcp mss: 1440[0m
+[0;32mI (2725) wifi_init: WiFi IRAM OP enabled[0m
+[0;32mI (2729) wifi_init: WiFi RX IRAM OP enabled[0m
+[0;32mI (2735) phy_init: phy_version 4791,2c4672b,Dec 20 2023,16:06:06[0m
+[0;32mI (2828) wifi:mode : softAP (4c:c3:82:c3:29:21)[0m
+[0;32mI (2830) wifi:Total power save buffer number: 16[0m
+[0;32mI (2830) wifi:Init max length of beacon: 752/752[0m
+[0;32mI (2831) wifi:Init max length of beacon: 752/752[0m
+[0;32mI (2841) wifi:Total power save buffer number: 16[0m
+[WEB] AP SSID: RESQLinkDrone
+[WEB] AP config result: OK
+[WEB] AP start result: OK
+[WEB] AP channel: 1
+[WEB] AP MAC: 4C:C3:82:C3:29:21
+[WEB] AP IP: 192.168.4.1
+[WEB] HTTP server started.
+[WEB] DNS captive portal started.
+[SETUP] Wi-Fi AP is live. Continuing background initialization in loop.
+[SETUP] Raw modem bridge will be enabled in the background.
+[SETUP] LTE init deferred to main loop.
+[SETUP] LTE init grace period: 30s for serial commands/upload mode.
+[SETUP] System ready.
+
+[LTE] ========== SIM7600G BRIDGE INIT ==========
+[LTE] UART RX pin: GPIO16, TX pin: GPIO17, PWRKEY pin: GPIO4, Baud: 115200
+[0;32mI (2900) uart: queue free spaces: 20[0m
+[0;32mI (3104) gpio: GPIO[4]| InputEn: 1| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[LTE] Bridge UART initialized; modem probes disabled.
+[SETUP] Raw modem bridge is available via the RAWBRIDGE serial command.
+[SETUP] Initializing SD card...
+[0;32mI (3216) gpio: GPIO[18]| InputEn: 1| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (3217) gpio: GPIO[19]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (3226) gpio: GPIO[23]| InputEn: 1| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (3236) gpio: GPIO[5]| InputEn: 1| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+File written successfully.
+Readback from /test.txt:
+Hello from ESP32!
+
+SD diagnostics: Card type = SDHC/SDXC
+SD diagnostics: Card size (MB) = 3840
+SD diagnostics: Total bytes (MB) = 3838
+SD diagnostics: Used bytes (MB) = 1
+[SETUP] ✓ SD card ready. Web portal files can now be accessed from /www/
+[SETUP] If no files appear, run the upload script:
+[SETUP]   powershell -ExecutionPolicy Bypass -File tools/upload-www-over-serial.ps1
+[GPS] Using SIM7600G built-in GNSS over AT commands.
+[LTE] Periodic full modem probe (all UART maps/baud rates)...
+[LTE] Starting AT command probes...
+[LTE] Probing UART mapping RX=GPIO16, TX=GPIO17, invert=OFF
+[LTE] Trying baud 115200
+[LTE] AT probe attempt 1/3 @ 115200 baud... [LTE] [DIAG] TX: AT
+[LTE] [DIAG] TIMEOUT after 2000ms - RX total: 0 bytes
+[LTE] No AT response (timeout).
+timeout
+[LTE] AT probe attempt 2/3 @ 115200 baud... [LTE] [DIAG] TX: AT
+[LTE] [DIAG] TIMEOUT after 2000ms - RX total: 0 bytes
+[LTE] No AT response (timeout).
+timeout
+[LTE] AT probe attempt 3/3 @ 115200 baud... [LTE] [DIAG] TX: AT
+[LTE] [DIAG] TIMEOUT after 2000ms - RX total: 0 bytes
+[LTE] No AT response (timeout).
+timeout
+[LTE] Trying baud 9600
+[LTE] AT probe attempt 1/3 @ 9600 baud... [LTE] [DIAG] TX: AT
+[LTE] [DIAG] RX byte 3: 0xFF '.'
+[LTE] [DIAG] RX byte 5: 0xFF '.'
+[LTE] [DIAG] RX byte 7: 0xFC '.'
+[LTE] [DIAG
